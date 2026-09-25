@@ -1,0 +1,1 @@
+<resources><style name="Theme.LocalDukaan" parent="android:style/Theme.Material.Light.NoActionBar"><item name="android:fontFamily">sans</item><item name="android:colorAccent">#3730A3</item><item name="android:windowBackground">#F8FAFC</item><item name="android:navigationBarColor">#FFFFFF</item></style></resources>

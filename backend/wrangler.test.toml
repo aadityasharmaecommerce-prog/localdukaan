@@ -1,0 +1,10 @@
+name="localdukaan-test"
+main="src/index.ts"
+compatibility_date="2025-09-17"
+[[d1_databases]]
+binding="DB"
+database_name="localdukaan-test"
+database_id="local"
+[[r2_buckets]]
+binding="MEDIA"
+bucket_name="localdukaan-media-test"

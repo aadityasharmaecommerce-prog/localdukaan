@@ -1,0 +1,29 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Awning (striped canopy) -->
+    <path
+        android:pathData="M30,34 L78,34 A4,4 0 0 1 82,38 L82,44 L26,44 L26,38 A4,4 0 0 1 30,34 Z"
+        android:fillColor="#0C831F"/>
+    <path
+        android:pathData="M26,44 L82,44 L82,47 L26,47 Z"
+        android:fillColor="#0A6B19"/>
+    <!-- Shop body -->
+    <path
+        android:pathData="M30,50 L78,50 L78,74 A2,2 0 0 1 76,76 L32,76 A2,2 0 0 1 30,74 Z"
+        android:fillColor="#FFFFFF"/>
+    <!-- Door -->
+    <path
+        android:pathData="M48,58 L60,58 A1.5,1.5 0 0 1 61.5,59.5 L61.5,76 L46.5,76 L46.5,59.5 A1.5,1.5 0 0 1 48,58 Z"
+        android:fillColor="#0C831F"/>
+    <!-- Window -->
+    <path
+        android:pathData="M34,58 L42,58 A1.5,1.5 0 0 1 43.5,59.5 L43.5,66.5 A1.5,1.5 0 0 1 42,68 L34,68 A1.5,1.5 0 0 1 32.5,66.5 L32.5,59.5 A1.5,1.5 0 0 1 34,58 Z"
+        android:fillColor="#E3F4E6"/>
+    <!-- Signboard dot -->
+    <path
+        android:pathData="M65,60 m-3,0 a3,3 0 1 1 6,0 a3,3 0 1 1 -6,0"
+        android:fillColor="#F8CB46"/>
+</vector>

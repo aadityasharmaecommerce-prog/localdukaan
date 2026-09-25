@@ -1,0 +1,5 @@
+
+# Release signing (local only)
+keystore.properties
+*.jks
+*.keystore

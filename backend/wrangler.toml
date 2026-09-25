@@ -1,0 +1,28 @@
+name = "localdukaan-api"
+main = "src/index.ts"
+compatibility_date = "2025-09-17"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "localdukaan"
+database_id = "fb5f754c-7f68-40f9-b951-f482f675a617"
+migrations_dir = "migrations"
+
+# R2 free account par enabled nahi hai; MEDIA code mein optional hai (image routes 503 denge).
+# R2 enable karne ke baad ye block uncomment karo (bucket pehle banao: npx wrangler r2 bucket create localdukaan-media):
+# [[r2_buckets]]
+# binding = "MEDIA"
+# bucket_name = "localdukaan-media"
+
+# Queues Workers Paid plan par available hai; NOTIFICATION_QUEUE code mein currently unused hai.
+# Paid plan lene ke baad uncomment karo (queue pehle banao: npx wrangler queues create localdukaan-notifications):
+# [[queues.producers]]
+# binding = "NOTIFICATION_QUEUE"
+# queue = "localdukaan-notifications"
+
+[vars]
+ENVIRONMENT = "production"
+ACCESS_TTL_SECONDS = "900"
+REFRESH_TTL_SECONDS = "2592000"
+# Cloudflare Workers runtime PBKDF2 iteration limit = 100,000. Default 210000 prod par OperationError deta hai.
+PIN_ITERATIONS = "100000"
