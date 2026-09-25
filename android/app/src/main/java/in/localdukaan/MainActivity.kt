@@ -185,7 +185,16 @@ class MainViewModel(private val r:AppRepository):ViewModel(){
    is BarcodeResolution.Invalid->_s.update{it.copy(scanMessage=found.message,scanError=true,pendingBarcode=pendingCode(entered),scannedGlobal=null,currentImage=null,scanning=false)}}
  }
  fun changeSaleQuantity(id:String,q:Long){_s.update{it.copy(quickSale=it.quickSale.setQuantity(id,q))}}
- fun finishSale()=run{val shop=_s.value.selectedShopId?:error("No shop selected");r.completeQuickSale(shop,_s.value.quickSale);_s.update{it.copy(screen="products",quickSale=QuickSaleState(),scanMessage="✓ Sale completed — syncing",scanError=false)};toast("✓ Sale saved")}
+ /** Product form ke liye SCAN: sirf prefill — POS cart ko kabhi nahi chhua. */
+ fun scanForForm(code:String)=run{
+  val entered=ProductRules.normalizeBarcode(code)
+  if(entered==null){_s.update{it.copy(scanMessage="Barcode khali hai — number daalein",scanError=true)};return@run}
+  _s.update{it.copy(scanning=true,error=null)}
+  val shop=_s.value.selectedShopId
+  val found=try{shop?.let{r.resolveBarcode(it,entered)}?:BarcodeResolution.NotFound(entered)}catch(t:Throwable){BarcodeResolution.Invalid(t.message?:"Scan problem — dobara try karo")}
+  val g=if(found is BarcodeResolution.Global)found else null
+  _s.update{it.copy(scanning=false,scannedGlobal=g,pendingBarcode=if(g!=null)g.barcode else entered,scanError=found is BarcodeResolution.Invalid,scanMessage=if(g!=null)"✓ ${g.name}${g.brand?.let{b->" ($b)"}?.orEmpty()} — sirf price/stock daalo" else if(found is BarcodeResolution.Local)"Ye barcode aapki dukaan mein pehle se hai" else if(found is BarcodeResolution.Invalid)found.message else "Naya barcode set — product add ho jayega")}
+ }
  fun attachScanned(){_s.update{it.copy(returnTo=if(it.screen=="quickSale") "quickSale" else null,screen="productForm",editing=null)}}
  fun archive(row:ProductRow)=run{val shop=_s.value.selectedShopId?:error("No shop selected");r.archiveProduct(shop,row.shopProduct.id)}
  fun openCustomers(shopId:String){_s.update{it.copy(screen="customers",selectedShopId=shopId)};watchCustomers(shopId);run{r.refreshCustomers(shopId)}}
@@ -293,7 +302,7 @@ class MainActivity:ComponentActivity(){
       "orders"->OrdersScreen(s,{vm.openOrder(it)})
       "orderDetail"->OrderDetailScreen(s,{vm.cancelOrder(it)})
       "shopOrders"->ShopOrdersScreen(s,{id,st->vm.advanceOrder(id,st)})
-      "productForm"->ProductForm(s.editing,s.currentImage,s.pendingBarcode,s.scannedGlobal?.name,s.scannedGlobal?.brand,{draft,image->vm.saveProduct(draft,image)},{vm.removeImage()},{vm.scan(it)})
+      "productForm"->ProductForm(s.editing,s.currentImage,s.pendingBarcode,s.scannedGlobal?.name,s.scannedGlobal?.brand,{draft,image->vm.saveProduct(draft,image)},{vm.removeImage()},{vm.scanForForm(it)})
       "more"->MoreTabScreen(s,{vm.openShopOrdersSafe()},{vm.openMarket()},{vm.openReports()},{vm.openSalesHistory()},{vm.openOrders()},{vm.show("shop")},{vm.openFinanceSafe()},{vm.logout()})
       else->Home(s,{id->vm.products(id)},{id->vm.openDashboard(id)},{id->vm.openQuickSale(id)},{vm.openMarket()},{vm.openOrders()},{vm.openShopOrdersSafe()},{vm.show("shop")},{vm.logout()})
      }

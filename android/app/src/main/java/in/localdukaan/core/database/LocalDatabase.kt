@@ -37,7 +37,7 @@ data class StockValueRow(val totalStockValuePaise:Long,val totalItems:Int,val lo
  @Query("SELECT * FROM purchase_list WHERE shopId=:shopId ORDER BY isPurchased,updatedAt DESC") fun purchaseList(shopId:String):Flow<List<PurchaseListEntity>>
  @Query("SELECT * FROM shop_customers WHERE shopId=:shopId AND isArchived=0 ORDER BY displayName") fun customers(shopId:String):Flow<List<ShopCustomerEntity>>
  @Query("SELECT * FROM credit_transactions WHERE shopId=:shopId AND shopCustomerId=:customerId ORDER BY createdAt DESC") fun creditStatement(shopId:String,customerId:String):Flow<List<CreditTransactionEntity>>
- @Query("SELECT createdAt/86400000 AS epochDay, SUM(totalPaise) AS salesPaise, SUM(creditAmountPaise) AS creditPaise, SUM(CASE WHEN status='COMPLETED' THEN 1 ELSE 0 END) AS bills FROM sales WHERE shopId=:shopId GROUP BY epochDay ORDER BY epochDay DESC LIMIT 30") fun dailySales(shopId:String):Flow<List<DailySaleRow>>
+ @Query("SELECT createdAt/86400000 AS epochDay, SUM(totalPaise) AS salesPaise, SUM(creditAmountPaise) AS creditPaise, SUM(CASE WHEN status!='REJECTED' THEN 1 ELSE 0 END) AS bills FROM sales WHERE shopId=:shopId GROUP BY epochDay ORDER BY epochDay DESC LIMIT 30") fun dailySales(shopId:String):Flow<List<DailySaleRow>>
  @Query("SELECT s.createdAt/86400000 AS epochDay, SUM(si.lineTotalPaise - (si.quantityMilli*sp.costPricePaise)/1000) AS profitPaise, SUM(si.quantityMilli) AS itemsSoldMilli FROM sale_items si JOIN sales s ON s.id=si.saleId JOIN shop_products sp ON sp.id=si.shopProductId WHERE s.shopId=:shopId GROUP BY epochDay ORDER BY epochDay DESC LIMIT 30") fun dailyProfit(shopId:String):Flow<List<DailyProfitRow>>
  @Query("SELECT COALESCE(SUM(stockQuantityMilli*costPricePaise)/1000,0) AS totalStockValuePaise, COUNT(*) AS totalItems, SUM(CASE WHEN stockQuantityMilli<=minimumStockMilli THEN 1 ELSE 0 END) AS lowCount FROM shop_products WHERE shopId=:shopId AND isArchived=0") fun stockValue(shopId:String):Flow<StockValueRow?>
  @Query("SELECT COALESCE(SUM(totalPaise),0) FROM sales WHERE shopId=:shopId AND status!='REJECTED'") suspend fun totalSales(shopId:String):Long
@@ -52,6 +52,8 @@ data class StockValueRow(val totalStockValuePaise:Long,val totalItems:Int,val lo
  @Insert(onConflict=OnConflictStrategy.REPLACE) suspend fun putSale(v:SaleEntity)
  @Insert(onConflict=OnConflictStrategy.REPLACE) suspend fun putSaleItems(v:List<SaleItemEntity>)
  @Query("UPDATE sales SET id=:serverId,status='COMPLETED' WHERE mutationId=:mutationId") suspend fun completeSale(mutationId:String,serverId:String)
+ @Query("UPDATE sale_items SET saleId=:serverId WHERE saleId=:localId") suspend fun remapSaleItems(localId:String,serverId:String)
+ @Query("UPDATE sales SET shopCustomerId=:newId WHERE shopCustomerId=:oldId") suspend fun remapSaleCustomer(oldId:String,newId:String)
  @Query("UPDATE sales SET status='REJECTED' WHERE mutationId=:mutationId") suspend fun rejectSale(mutationId:String)
  @Insert(onConflict=OnConflictStrategy.REPLACE) suspend fun putCustomer(v:CustomerEntity)
  @Insert(onConflict=OnConflictStrategy.REPLACE) suspend fun putShopCustomer(v:ShopCustomerEntity)
