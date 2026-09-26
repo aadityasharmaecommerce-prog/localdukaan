@@ -15,6 +15,8 @@ object DukaanColors {
     // Peela rang header, buttons aur highlights me; kaala text peele par; hara sirf success/stock.
     val FlipkartYellow = Color(0xFFFFD814)     // brand primary (top bar, buttons, highlights)
     val FlipkartYellowDark = Color(0xFFF5C236) // gradient end / pressed
+    val FlipkartBlue = Color(0xFF2874F0)       // links + accents (Flipkart blue)
+    val AmazonDark = Color(0xFF131921)         // premium headings (Amazon dark)
     val BlinkitYellow = Color(0xFFF8CB46)   // legacy brand alias (ab FlipkartYellow jaisa)
     val BlinkitGreen = Color(0xFF0C831F)    // CTA / success
     val Green = BlinkitGreen                // legacy alias
@@ -24,7 +26,7 @@ object DukaanColors {
     val LightGreen = Color(0xFFE3F4E6)      // success tint
     val LightYellow = Color(0xFFFDF3D7)     // warning/info tint
 
-    val Blue = Color(0xFF0C831F)            // "actions" ab green (legacy Blue token calls)
+    val Blue = Color(0xFF2874F0)            // links/actions ab Flipkart blue
     val Navy = Color(0xFF0A6B19)            // legacy primary ab deep green
     val LightBlue = Color(0xFFE3F4E6)       // legacy tint ab light green
 
