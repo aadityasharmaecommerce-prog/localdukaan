@@ -52,4 +52,37 @@ class DrawerIdentityTest {
   // owner == title == profile naam — teeno same hon to subtitle bilkul nahi
   assertNull(id.subtitle)
  }
+
+ /** Dual-role account: customer-tab login par customer UI — shopkeeper dashboard kabhi nahi. */
+ private fun dualProfile(name: String?) = LocalProfile("u3", name ?: "", "hi", true, true, true)
+
+ @Test fun dualRoleCustomerTabShowsCustomerIdentity() {
+  val id = drawerIdentity(dualProfile("Avni"), listOf(shop("s1", "Sharma General Store", "Avni")), "s1", "CUSTOMER")
+  assertEquals("Avni", id.title)
+  assertEquals("CUSTOMER", id.roleKey)
+  assertNull(id.subtitle)
+ }
+
+ @Test fun dualRoleShopkeeperTabShowsShopIdentity() {
+  val id = drawerIdentity(dualProfile("Avni"), listOf(shop("s1", "Sharma General Store", "Avni")), "s1", "SHOPKEEPER")
+  assertEquals("Sharma General Store", id.title)
+  assertEquals("SHOPKEEPER", id.roleKey)
+  assertEquals("Avni", id.subtitle)
+ }
+
+ @Test fun noActiveRoleFallsBackToProfileFlags() {
+  val id = drawerIdentity(dualProfile("Avni"), listOf(shop("s1", "Sharma General Store", "Avni")), "s1", null)
+  assertEquals("SHOPKEEPER", id.roleKey)
+ }
+
+ @Test fun uiStateRoleGatingPrefersLoginTab() {
+  val dual = dualProfile("Avni")
+  assertTrue(UiState(profile = dual, activeRole = "CUSTOMER").isCustomerView)
+  assertFalse(UiState(profile = dual, activeRole = "CUSTOMER").isShopkeeper)
+  assertTrue(UiState(profile = dual, activeRole = "SHOPKEEPER").isShopkeeper)
+  assertFalse(UiState(profile = dual, activeRole = "SHOPKEEPER").isCustomerView)
+  // Purane sessions (role save nahi) — purana behavior, no regression
+  assertTrue(UiState(profile = dual, activeRole = null).isShopkeeper)
+  assertTrue(UiState(profile = customerProfile("R"), activeRole = null).isCustomerView)
+ }
 }

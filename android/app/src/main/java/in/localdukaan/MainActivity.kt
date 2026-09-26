@@ -107,10 +107,15 @@ val BrandRed = Color(0xFFDC2626)
 val BrandBg = Color(0xFFF6FAF7)
 val BrandCard = Color(0xFFEFF7F1)
 
-data class UiState(val screen:String="login",val busy:Boolean=false,val drawerOpen:Boolean=false,val profile:LocalProfile?=null,val shops:List<LocalShop> = emptyList(),val products:List<ProductRow> = emptyList(),val selectedShopId:String?=null,val editing:ProductRow?=null,val editingShop:LocalShop?=null,val currentImage:ByteArray?=null,val quickSale:QuickSaleState=QuickSaleState(),val scanMessage:String?=null,val scanError:Boolean=false,val scannedGlobal:BarcodeResolution.Global?=null,val pendingBarcode:String?=null,val inventoryProduct:ProductRow?=null,val inventoryHistory:List<InventoryTransactionEntity> = emptyList(),val customers:List<ShopCustomerEntity> = emptyList(),val customer:ShopCustomerEntity?=null,val creditStatement:List<CreditTransactionEntity> = emptyList(),val marketShops:List<MarketShop> = emptyList(),val marketShop:MarketShop?=null,val marketProducts:List<MarketProduct> = emptyList(),val cart:Cart=Cart(),val addresses:List<OrderAddress> = emptyList(),val orders:List<OrderSummary> = emptyList(),val order:OrderDetail?=null,val shopOrders:List<OrderSummary> = emptyList(),val myCreditShops:List<MyCreditShop> = emptyList(),val myCreditEntries:List<MyCreditEntry> = emptyList(),val customerSales:List<SaleEntity> = emptyList(),val saleSuccess:SaleSuccess?=null,val receipt:ReceiptData?=null,val finance:FinanceSummary?=null,val marketQuery:String="",val dailySales:List<DailySaleRow> = emptyList(),val dailyProfit:List<DailyProfitRow> = emptyList(),val stockValue:StockValueRow?=null,val purchaseItems:List<PurchaseListEntity> = emptyList(),val dues:Pair<Long,Int>?=null,val toast:String?=null,val error:String?=null,val offline:Boolean=false,val scanning:Boolean=false,val voiceListening:Boolean=false,val voiceHeard:String?=null,val voiceConfirm:SaleOption?=null,val voiceChoices:List<SaleOption> = emptyList(),val voiceAnswer:String?=null,val voiceError:String?=null,val returnTo:String?=null,val pendingRole:String?=null,val booting:Boolean=false)
+data class UiState(val screen:String="login",val busy:Boolean=false,val drawerOpen:Boolean=false,val profile:LocalProfile?=null,val shops:List<LocalShop> = emptyList(),val products:List<ProductRow> = emptyList(),val selectedShopId:String?=null,val editing:ProductRow?=null,val editingShop:LocalShop?=null,val currentImage:ByteArray?=null,val quickSale:QuickSaleState=QuickSaleState(),val scanMessage:String?=null,val scanError:Boolean=false,val scannedGlobal:BarcodeResolution.Global?=null,val pendingBarcode:String?=null,val inventoryProduct:ProductRow?=null,val inventoryHistory:List<InventoryTransactionEntity> = emptyList(),val customers:List<ShopCustomerEntity> = emptyList(),val customer:ShopCustomerEntity?=null,val creditStatement:List<CreditTransactionEntity> = emptyList(),val marketShops:List<MarketShop> = emptyList(),val marketShop:MarketShop?=null,val marketProducts:List<MarketProduct> = emptyList(),val cart:Cart=Cart(),val addresses:List<OrderAddress> = emptyList(),val orders:List<OrderSummary> = emptyList(),val order:OrderDetail?=null,val shopOrders:List<OrderSummary> = emptyList(),val myCreditShops:List<MyCreditShop> = emptyList(),val myCreditEntries:List<MyCreditEntry> = emptyList(),val customerSales:List<SaleEntity> = emptyList(),val saleSuccess:SaleSuccess?=null,val receipt:ReceiptData?=null,val finance:FinanceSummary?=null,val marketQuery:String="",val dailySales:List<DailySaleRow> = emptyList(),val dailyProfit:List<DailyProfitRow> = emptyList(),val stockValue:StockValueRow?=null,val purchaseItems:List<PurchaseListEntity> = emptyList(),val dues:Pair<Long,Int>?=null,val toast:String?=null,val error:String?=null,val offline:Boolean=false,val scanning:Boolean=false,val voiceListening:Boolean=false,val voiceHeard:String?=null,val voiceConfirm:SaleOption?=null,val voiceChoices:List<SaleOption> = emptyList(),val voiceAnswer:String?=null,val voiceError:String?=null,val returnTo:String?=null,val pendingRole:String?=null,val booting:Boolean=false,val activeRole:String?=null){
+ /** Navigation ka single source of truth — login TAB. Dual-role account me customer-tab se
+  *  login par shopkeeper dashboard KABHI nahi (yehi bug tha). Fallback: purane sessions. */
+ val isShopkeeper:Boolean get()=activeRole?.let{it=="SHOPKEEPER"}?:(profile?.shopkeeper==true)
+ val isCustomerView:Boolean get()=activeRole?.let{it=="CUSTOMER"}?:(profile?.customer==true&&profile?.shopkeeper!=true)
+}
 
 class MainViewModel(private val r:AppRepository):ViewModel(){
- private val _s=MutableStateFlow(UiState(screen=if(r.loggedIn())"boot" else "login",booting=r.loggedIn()));val state=_s.asStateFlow()
+  private val _s=MutableStateFlow(UiState(screen=if(r.loggedIn())"boot" else "login",booting=r.loggedIn(),activeRole=r.savedRole()));val state=_s.asStateFlow()
   private var customerJob:Job?=null;private var statementJob:Job?=null;private var productsJob:Job?=null;private var inventoryJob:Job?=null;private var salesJob:Job?=null;private var purchaseJob:Job?=null
  private val backStack=ArrayDeque<String>()
  init{
@@ -119,19 +124,20 @@ class MainViewModel(private val r:AppRepository):ViewModel(){
   if(r.loggedIn())viewModelScope.launch{runCatching{r.restoreSession();r.loadShops()}.fold(onSuccess={resolveStartup()},onFailure={e->_s.update{it.copy(booting=false,error=e.message?:"Session expired",screen="login",selectedShopId=null)}})}
  }
  private fun run(block:suspend()->Unit){ if(_s.value.busy){toast("The previous task is still running — please wait a moment");return};viewModelScope.launch{_s.update{it.copy(busy=true,error=null)};runCatching{block()}.onSuccess{_s.update{it.copy(offline=false)}}.onFailure{e->_s.update{it.copy(error=e.message?:"Something went wrong",offline=e is IOException)}};_s.update{it.copy(busy=false)}}}
- fun login(phone:String,pin:String,role:String)=run{r.login(phone,pin);val p=r.profileNow()
+ fun login(phone:String,pin:String,role:String)=run{r.login(phone,pin);r.saveRole(role);val p=r.profileNow()
   val keeper=p?.shopkeeper==true;val isCustomer=p?.customer==true;val wantShopkeeper=role=="SHOPKEEPER"
   // ROLE SIRF BACKEND PROFILE SE aata hai, aur login TAB usse match hona chahiye — warna session turant revoke.
-  if(p==null||(!keeper&&!isCustomer)){runCatching{r.logout()};_s.update{it.copy(screen="login",error="Account is not set up properly — please login again")};return@run}
-  if(wantShopkeeper&&!keeper){runCatching{r.logout()};_s.update{it.copy(screen="login",error="This is a Customer account — please login from the Customer tab")};return@run}
-  if(!wantShopkeeper&&keeper&&!isCustomer){runCatching{r.logout()};_s.update{it.copy(screen="login",error="This is a Shopkeeper account — please login from the Shopkeeper tab")};return@run}
-  if(p.name.isNullOrBlank()){_s.update{it.copy(screen="profile",selectedShopId=null,pendingRole=if(keeper)"SHOPKEEPER" else "CUSTOMER")};return@run}
-  if(wantShopkeeper){r.loadShops();_s.update{it.copy(screen="boot",booting=true,selectedShopId=null,shops=emptyList(),pendingRole="SHOPKEEPER")};resolveStartup()}
-  else{_s.update{it.copy(screen="home",selectedShopId=null,shops=emptyList(),pendingRole="CUSTOMER")}}}
- fun register(phone:String,pin:String,confirm:String,role:String)=run{r.register(phone,pin,confirm,role);_s.update{it.copy(screen="profile",pendingRole=role)}}
+  if(p==null||(!keeper&&!isCustomer)){runCatching{r.logout()};_s.update{it.copy(screen="login",activeRole=null,error="Account is not set up properly — please login again")};return@run}
+  if(wantShopkeeper&&!keeper){runCatching{r.logout()};_s.update{it.copy(screen="login",activeRole=null,error="This is a Customer account — please login from the Customer tab")};return@run}
+  if(!wantShopkeeper&&keeper&&!isCustomer){runCatching{r.logout()};_s.update{it.copy(screen="login",activeRole=null,error="This is a Shopkeeper account — please login from the Shopkeeper tab")};return@run}
+  if(p.name.isNullOrBlank()){_s.update{it.copy(screen="profile",selectedShopId=null,activeRole=role,pendingRole=if(keeper)"SHOPKEEPER" else "CUSTOMER")};return@run}
+  if(wantShopkeeper){r.loadShops();_s.update{it.copy(screen="boot",booting=true,selectedShopId=null,activeRole=role,pendingRole="SHOPKEEPER")};resolveStartup()}
+  else{_s.update{it.copy(screen="home",selectedShopId=null,shops=emptyList(),activeRole=role,pendingRole="CUSTOMER")}}}
+ fun register(phone:String,pin:String,confirm:String,role:String)=run{r.register(phone,pin,confirm,role);r.saveRole(role);_s.update{it.copy(screen="profile",activeRole=role,pendingRole=role)}}
  fun profile(name:String,customer:Boolean,shopkeeper:Boolean,hi:Boolean)=run{r.saveProfile(name,hi,customer,shopkeeper)
-  if(shopkeeper){r.loadShops();if(r.shopsNow().isEmpty())_s.update{it.copy(screen="shop",selectedShopId=null)}else{_s.update{it.copy(screen="boot",booting=true,selectedShopId=null)};resolveStartup()}}
-  else _s.update{it.copy(screen="home",selectedShopId=null)}}
+  val role=_s.value.pendingRole?:if(shopkeeper)"SHOPKEEPER" else "CUSTOMER";r.saveRole(role)
+  if(shopkeeper){r.loadShops();if(r.shopsNow().isEmpty())_s.update{it.copy(screen="shop",selectedShopId=null,activeRole=role)}else{_s.update{it.copy(screen="boot",booting=true,selectedShopId=null,activeRole=role)};resolveStartup()}}
+  else _s.update{it.copy(screen="home",selectedShopId=null,activeRole=role)}}
  fun shop(v:List<String>)=run{runCatching{r.createShop(v[0],v[1],v[2],v[3],v[4],v[5],v[6],v[7].toDouble(),v[8].toDouble())}.onSuccess{x->r.loadShops();_s.update{it.copy(toast="✓ Shop created")};resolveStartup()}.onFailure{e->val msg=(e.message?:"");if((e as? ApiException)?.code=="SHOP_ALREADY_EXISTS"){r.loadShops();_s.update{it.copy(toast="Your shop already exists — opening it")};resolveStartup()}else _s.update{it.copy(error=msg)}}}
  fun products(shopId:String){val same=_s.value.selectedShopId==shopId;_s.update{it.copy(screen="products",selectedShopId=shopId,products=if(same)_s.value.products else emptyList())};watchProducts(shopId);run{r.refreshProducts(shopId)}}
  private fun watchProducts(shopId:String){productsJob?.cancel();productsJob=viewModelScope.launch{r.observeProducts(shopId).collect{rows->_s.update{it.copy(products=rows)}}};salesJob?.cancel();salesJob=viewModelScope.launch{r.sales(shopId).collect{list->_s.update{it.copy(customerSales=list)}}}}
@@ -148,7 +154,10 @@ class MainViewModel(private val r:AppRepository):ViewModel(){
   *  0 shops → shopkeeper ko Create Shop form (warna customer home).
   *  exactly 1 shop → auto-select + DIRECT dashboard (koi beech ka shop-card screen nahi dikhta).
   *  multiple shops → selection list (home). */
- private fun resolveStartup(){viewModelScope.launch{val shops=r.shopsNow();val shopkeeper=_s.value.profile?.shopkeeper==true
+ private fun resolveStartup(){viewModelScope.launch{
+  // Customer view me dukaan-dashboard kabhi nahi — chahe profile dual-role hi kyun na ho.
+  if(_s.value.isCustomerView){_s.update{it.copy(screen="home",selectedShopId=null,booting=false)};return@launch}
+  val shops=r.shopsNow();val shopkeeper=_s.value.isShopkeeper
   when{shops.isEmpty()->_s.update{it.copy(screen=if(shopkeeper)"shop" else "home",selectedShopId=null,booting=false)}
    shops.size==1->{val sid=shops.first().id;if(_s.value.selectedShopId==sid&&_s.value.screen=="dashboard")loadShopDashboard(sid)else openDashboard(sid)}
    else->_s.update{it.copy(screen="home",selectedShopId=null,booting=false)}}}}
@@ -254,10 +263,10 @@ class MainViewModel(private val r:AppRepository):ViewModel(){
  fun advanceOrder(orderId:String,status:String)=run{val shopId=_s.value.selectedShopId?:error("No shop selected");r.advanceOrder(shopId,orderId,status);runCatching{_s.update{it.copy(shopOrders=r.shopOrders(shopId,""))}};_s.update{it.copy(toast="Order updated")}}
  fun show(s:String){pushCurrent();_s.update{it.copy(screen=s,error=null)}}
  fun showWithRole(s:String,role:String){pushCurrent();_s.update{it.copy(screen=s,error=null,pendingRole=role)}}
- fun back(){_s.update{it.copy(drawerOpen=false)};val cur=_s.value.screen;val target=backStack.removeLastOrNull()?:defaultBack(cur);val safe=if(target=="home"&&_s.value.profile?.shopkeeper==true&&_s.value.shops.size<=1)"dashboard" else target;if(safe==cur)return;_s.update{it.copy(screen=safe,error=null)}}
-   private fun defaultBack(cur:String)=when(cur){"products"->shopHome();"quickSale"->"products";"lowStock"->"products";"purchaseList"->"lowStock";"inventory"->"products";"customers"->"products";"customerForm"->"customers";"customerDetail"->"customers";"productForm"->if(_s.value.returnTo=="quickSale")"quickSale" else "products";"dashboard"->if(_s.value.profile?.shopkeeper==true)"dashboard" else "home";"more"->"dashboard";"reports"->shopHome();"shopPage"->"market";"checkout"->"shopPage";"orderDetail"->"orders";"shopOrders"->shopHome();"sales"->"dashboard";"shopEdit"->shopHome();"changePin"->shopHome();else->shopHome()}
+ fun back(){_s.update{it.copy(drawerOpen=false)};val cur=_s.value.screen;val target=backStack.removeLastOrNull()?:defaultBack(cur);val safe=if(target=="home"&&_s.value.isShopkeeper&&_s.value.shops.size<=1)"dashboard" else target;if(safe==cur)return;_s.update{it.copy(screen=safe,error=null)}}
+   private fun defaultBack(cur:String)=when(cur){"products"->shopHome();"quickSale"->"products";"lowStock"->"products";"purchaseList"->"lowStock";"inventory"->"products";"customers"->"products";"customerForm"->"customers";"customerDetail"->"customers";"productForm"->if(_s.value.returnTo=="quickSale")"quickSale" else "products";"dashboard"->if(_s.value.isShopkeeper)"dashboard" else "home";"more"->"dashboard";"reports"->shopHome();"shopPage"->"market";"checkout"->"shopPage";"orderDetail"->"orders";"shopOrders"->shopHome();"sales"->"dashboard";"shopEdit"->shopHome();"changePin"->shopHome();else->shopHome()}
  /** Ek-shop shopkeeper ka "ghar" dashboard hai — intermediate shop screen kabhi nahi. */
- private fun shopHome()=if(_s.value.profile?.shopkeeper==true&&_s.value.shops.size<=1)"dashboard" else "home"
+ private fun shopHome()=if(_s.value.isShopkeeper&&_s.value.shops.size<=1)"dashboard" else "home"
   fun saveShopPublish()=run{val shop=_s.value.shops.firstOrNull{it.id==_s.value.selectedShopId}?:return@run;runCatching{r.publishShop(shop,!shop.isPublished)}.onSuccess{_s.update{x->x.copy(toast=if(!shop.isPublished)"Shop is now live on the marketplace" else "Shop is no longer on the marketplace")}}.onFailure{e->_s.update{x->x.copy(error=e.message)}}}
   fun editShopSafe(){val shop=_s.value.selectedShopId?.let{id->_s.value.shops.firstOrNull{it.id==id}}?:_s.value.shops.firstOrNull()?:return;pushCurrent();_s.update{it.copy(screen="shopEdit",editingShop=shop,error=null)}}
   fun saveShopEdit(name:String,owner:String,address:String,locality:String,city:String,pincode:String,phone:String,desc:String)=run{val shop=_s.value.editingShop?:error("No shop selected");require(name.isNotBlank()&&owner.isNotBlank()&&address.isNotBlank()&&locality.isNotBlank()&&city.isNotBlank()){"Name, owner, address, locality and city are required"};require(pincode.matches(Regex("[1-9]\\d{5}"))){"Enter a valid 6-digit pincode"};r.saveShopProfile(shop,name,owner,address,locality,city,pincode,phone,desc);_s.update{it.copy(screen="dashboard",editingShop=null,toast="✓ Shop updated")}}
@@ -334,11 +343,11 @@ class MainActivity:ComponentActivity(){
  val snackbar=remember{SnackbarHostState()}
  val moreOpen=s.screen=="more"
  androidx.compose.runtime.LaunchedEffect(s.toast){s.toast?.let{snackbar.showSnackbar(it);vm.clearToast()}}
- LaunchedEffect(s.screen,s.profile?.customer){if(s.screen=="home"&&s.profile?.customer==true)vm.loadMyCredit()}
+ LaunchedEffect(s.screen,s.isCustomerView){if(s.screen=="home"&&s.isCustomerView)vm.loadMyCredit()}
  BackHandler(enabled=s.screen!="login"&&s.screen!="boot"){if(s.drawerOpen)vm.closeDrawer() else vm.back()}
  Surface(Modifier.fillMaxSize(),color=MaterialTheme.colorScheme.background){
   Box(Modifier.fillMaxSize()){
-  androidx.compose.material3.Scaffold(snackbarHost={SnackbarHost(snackbar)},topBar={if(s.screen!="login"&&s.screen!="register"&&s.screen!="boot")TopBar(s,{vm.openDrawer()},{vm.back()},{vm.saveShopPublish()},null)},bottomBar={if((s.screen=="home"||s.screen=="dashboard")&&s.profile?.shopkeeper==true)DukaanNavBar(moreOpen,{tab->when(tab){DukaanTab.DASHBOARD->s.selectedShopId?.let{vm.openDashboard(it)};DukaanTab.CATALOGUE->s.selectedShopId?.let{vm.products(it)}?:vm.show("shop");DukaanTab.QUICK_SALE->vm.quickSaleForSelected();DukaanTab.KHATA->vm.customersForSelected();DukaanTab.MORE->vm.show("more")}})}){pad->
+  androidx.compose.material3.Scaffold(snackbarHost={SnackbarHost(snackbar)},topBar={if(s.screen!="login"&&s.screen!="register"&&s.screen!="boot")TopBar(s,{vm.openDrawer()},{vm.back()},{vm.saveShopPublish()},null)},bottomBar={if((s.screen=="home"||s.screen=="dashboard")&&s.isShopkeeper)DukaanNavBar(moreOpen,{tab->when(tab){DukaanTab.DASHBOARD->s.selectedShopId?.let{vm.openDashboard(it)};DukaanTab.CATALOGUE->s.selectedShopId?.let{vm.products(it)}?:vm.show("shop");DukaanTab.QUICK_SALE->vm.quickSaleForSelected();DukaanTab.KHATA->vm.customersForSelected();DukaanTab.MORE->vm.show("more")}})}){pad->
    Box(Modifier.fillMaxSize().padding(pad)){
     if(s.screen=="boot"){Column(Modifier.fillMaxSize(),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.Center){Text("🛍️",fontSize=44.sp);Spacer(Modifier.height(10.dp));Text(stringResource(R.string.app_name),style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.ExtraBold,color=DukaanColors.Navy);Spacer(Modifier.height(6.dp));LinearProgressIndicator(Modifier.width(140.dp),color=DukaanColors.BlinkitGreen)}}
     else Column(Modifier.fillMaxSize()){Column(Modifier.padding(horizontal=20.dp).weight(1f)){
@@ -432,9 +441,9 @@ enum class DukaanTab{DASHBOARD,CATALOGUE,QUICK_SALE,KHATA,MORE}
 @Composable fun PublishChip(unpublished:Boolean,onToggle:()->Unit){Box(Modifier.clip(RoundedCornerShape(999.dp)).background(if(unpublished)Color(0xFFFEF3C7) else DukaanColors.LightBlue).clickable{onToggle()}.padding(horizontal=12.dp,vertical=6.dp)){Text(if(unpublished)"● Not live · tap to go live" else "● LIVE",fontSize=11.sp,fontWeight=FontWeight.Bold,color=if(unpublished)Color(0xFF92400E) else DukaanColors.Navy)}}
 /** Drawer header ka pure logic — JVM unit test me verify hota hai (Avni-case samet). */
 data class DrawerIdentity(val title:String,val subtitle:String?,val roleKey:String,val initial:String)
-fun drawerIdentity(profile:LocalProfile?,shops:List<LocalShop>,selectedShopId:String?):DrawerIdentity{
+fun drawerIdentity(profile:LocalProfile?,shops:List<LocalShop>,selectedShopId:String?,activeRole:String?=null):DrawerIdentity{
  val displayName=profile?.name?.trim().takeIf{!it.isNullOrEmpty()}?:"LocalDukaan"
- val isKeeper=profile?.shopkeeper==true
+ val isKeeper=activeRole?.let{it=="SHOPKEEPER"}?:(profile?.shopkeeper==true)
  val selected=selectedShopId?.let{id->shops.firstOrNull{it.id==id}}?:shops.firstOrNull()
  val title=if(isKeeper)selected?.name?.takeIf{it.isNotBlank()}?:displayName else displayName
  // Subtitle kabhi title jaisa nahi — warna "Avni • Avni" jaisi duplicate line banti hai.
@@ -454,7 +463,7 @@ fun drawerIdentity(profile:LocalProfile?,shops:List<LocalShop>,selectedShopId:St
       // Premium identity header — SHOPKEEPER ke liye shop ka naam hero, vyakti ka naam subtitle.
       // Pehle hamesha vyakti ka naam bada dikhta tha (dukaan pehchani nahi jaati thi).
       Row(Modifier.fillMaxWidth().background(DukaanColors.DrawerGradient).padding(start=16.dp,end=16.dp,top=20.dp,bottom=20.dp),verticalAlignment=Alignment.CenterVertically){
-       val id=drawerIdentity(s.profile,s.shops,s.selectedShopId)
+       val id=drawerIdentity(s.profile,s.shops,s.selectedShopId,s.activeRole)
        Box(Modifier.size(52.dp).clip(CircleShape).background(Color.White),contentAlignment=Alignment.Center){Text(id.initial,fontSize=22.sp,fontWeight=FontWeight.ExtraBold,color=DukaanColors.GreenDark)}
        Spacer(Modifier.width(12.dp))
        Column(Modifier.weight(1f)){
@@ -466,9 +475,9 @@ fun drawerIdentity(profile:LocalProfile?,shops:List<LocalShop>,selectedShopId:St
         }
        }
       }
-     // Scrollable menu — chhoti screens par bhi sab items accessible
-     Column(Modifier.weight(1f,true).verticalScroll(rememberScrollState()).padding(vertical=6.dp)){
-      if(s.profile?.shopkeeper==true){
+      // Scrollable menu — chhoti screens par bhi sab items accessible
+      Column(Modifier.weight(1f,true).verticalScroll(rememberScrollState()).padding(vertical=6.dp)){
+       if(s.isShopkeeper){
        DrawerLabel("MY SHOP");DrawerItem(Icons.Default.Storefront,"My Shop",{s.shops.firstOrNull()?.let{dashboard(it.id)}})
        DrawerItem(Icons.Default.Analytics,"Reports",reports)
        DrawerLabel("ORDERS");DrawerItem(Icons.Default.ShoppingBag,"My Orders",myOrders)
@@ -728,7 +737,7 @@ fun drawerIdentity(profile:LocalProfile?,shops:List<LocalShop>,selectedShopId:St
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable fun Home(s:UiState,products:(String)->Unit,dashboard:(String)->Unit,quickSale:(String)->Unit,market:()->Unit,orders:()->Unit,shopOrders:()->Unit,createShop:()->Unit,logout:()->Unit){
- val isShopkeeper=s.profile?.shopkeeper==true
+ val isShopkeeper=s.isShopkeeper
  LazyColumn(Modifier.fillMaxSize(),verticalArrangement=Arrangement.spacedBy(10.dp)){item{Spacer(Modifier.height(8.dp));Text("👋 ${stringResource(R.string.namaste)} ${s.profile?.name.orEmpty()}",style=MaterialTheme.typography.headlineMedium,fontWeight=FontWeight.ExtraBold,color=DukaanColors.Navy);Text(if(isShopkeeper)"Your shop, your business" else "Nearby shops, now online",color=DukaanColors.Slate500)}
   if(!isShopkeeper){
    item{Spacer(Modifier.height(4.dp));GradientButton("🛍️ "+stringResource(R.string.nearby_shops),true,market)}
