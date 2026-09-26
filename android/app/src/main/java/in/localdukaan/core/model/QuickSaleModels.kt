@@ -27,7 +27,9 @@ data class QuickSaleState(
  /** Walk-in = koi pehchaan nahi; sirf udhaari ke liye customer zaroori. */
  fun identify(name:String?,phone:String?):QuickSaleState=if(name.isNullOrBlank()&&phone.isNullOrBlank())copy(walkIn=true,customerName=null,customerPhone=null) else copy(walkIn=false,customerName=name?.trim()?.takeIf{it.isNotBlank()},customerPhone=phone?.trim()?.takeIf{it.isNotBlank()})
  fun walkInCustomer():QuickSaleState=copy(walkIn=true,customerName=null,customerPhone=null)
- val subtotalPaise:Long get()=lines.values.fold(0L){sum,line->Math.addExact(sum,line.lineTotalPaise)}
+  val subtotalPaise:Long get()=lines.values.fold(0L){sum,line->Math.addExact(sum,line.lineTotalPaise)}
+  /** Sirf wahi lines jinka cost set hai — warna munafa overestimate hota. */
+  val estimatedProfitPaise:Long get()=lines.values.filter{it.costPricePaise>0}.fold(0L){sum,line->Math.addExact(sum,(line.unitPricePaise-line.costPricePaise)*line.quantityMilli/1000)}
  val totalPaise:Long get()=(subtotalPaise-discountPaise).coerceAtLeast(0)
  val estimatedCostPaise:Long get()=lines.values.fold(0L){sum,line->Math.addExact(sum,line.lineCostPaise)}
  val canSubmit:Boolean get()=lines.isNotEmpty()&&(paymentMode==SalePaymentMode.PAID||!shopCustomerId.isNullOrBlank())
@@ -41,7 +43,7 @@ data class QuickSaleState(
 }
 
 /** Success screen ka summary — sale complete hone ke turant baad. */
-data class SaleSuccess(val saleId:String,val totalPaise:Long,val subtotalPaise:Long,val discountPaise:Long,val methodLabel:String,val customerLabel:String,val paidPaise:Long,val duePaise:Long)
+data class SaleSuccess(val saleId:String,val totalPaise:Long,val subtotalPaise:Long,val discountPaise:Long,val methodLabel:String,val customerLabel:String,val paidPaise:Long,val duePaise:Long,val profitPaise:Long=0)
 
 /** Receipt screen ke liye poora sale snapshot (local PENDING + synced COMPLETED dono chalte hain). */
 data class ReceiptData(val id:String,val shopName:String,val shopLine:String?,val createdAt:Long,val items:List<QuickSaleLine>,val subtotalPaise:Long,val discountPaise:Long,val totalPaise:Long,val methodLabel:String,val customerLabel:String,val paidPaise:Long,val duePaise:Long,val pendingSync:Boolean)

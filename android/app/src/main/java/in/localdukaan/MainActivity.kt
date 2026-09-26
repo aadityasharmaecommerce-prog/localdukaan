@@ -67,6 +67,14 @@ import `in`.localdukaan.core.model.SelectedImage
 import `in`.localdukaan.core.model.BarcodeRules
 import `in`.localdukaan.core.model.ProductRules
 import `in`.localdukaan.core.model.QuickSaleState
+import `in`.localdukaan.core.model.QuickSaleLine
+import `in`.localdukaan.core.voice.VoiceFail
+import `in`.localdukaan.core.voice.VoiceListenResult
+import `in`.localdukaan.core.voice.VoiceListener
+import android.Manifest
+import android.content.pm.PackageManager
+import android.speech.SpeechRecognizer
+import androidx.core.content.ContextCompat
 import `in`.localdukaan.core.model.SalePaymentMode
 import `in`.localdukaan.core.model.PaymentMethod
 import `in`.localdukaan.core.model.SaleSuccess
@@ -85,6 +93,9 @@ import `in`.localdukaan.core.model.OrderDetail
 import `in`.localdukaan.core.model.OrderStatusFlow
 import `in`.localdukaan.core.model.MyCreditShop
 import `in`.localdukaan.core.model.MyCreditEntry
+import `in`.localdukaan.core.model.SaleOption
+import `in`.localdukaan.core.model.VoiceCmd
+import `in`.localdukaan.core.model.VoiceParser
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
@@ -100,7 +111,7 @@ val BrandRed = Color(0xFFDC2626)
 val BrandBg = Color(0xFFF6FAF7)
 val BrandCard = Color(0xFFEFF7F1)
 
-data class UiState(val screen:String="login",val busy:Boolean=false,val drawerOpen:Boolean=false,val profile:LocalProfile?=null,val shops:List<LocalShop> = emptyList(),val products:List<ProductRow> = emptyList(),val selectedShopId:String?=null,val editing:ProductRow?=null,val editingShop:LocalShop?=null,val currentImage:ByteArray?=null,val quickSale:QuickSaleState=QuickSaleState(),val scanMessage:String?=null,val scanError:Boolean=false,val scannedGlobal:BarcodeResolution.Global?=null,val pendingBarcode:String?=null,val inventoryProduct:ProductRow?=null,val inventoryHistory:List<InventoryTransactionEntity> = emptyList(),val customers:List<ShopCustomerEntity> = emptyList(),val customer:ShopCustomerEntity?=null,val creditStatement:List<CreditTransactionEntity> = emptyList(),val marketShops:List<MarketShop> = emptyList(),val marketShop:MarketShop?=null,val marketProducts:List<MarketProduct> = emptyList(),val cart:Cart=Cart(),val addresses:List<OrderAddress> = emptyList(),val orders:List<OrderSummary> = emptyList(),val order:OrderDetail?=null,val shopOrders:List<OrderSummary> = emptyList(),val myCreditShops:List<MyCreditShop> = emptyList(),val myCreditEntries:List<MyCreditEntry> = emptyList(),val customerSales:List<SaleEntity> = emptyList(),val saleSuccess:SaleSuccess?=null,val receipt:ReceiptData?=null,val finance:FinanceSummary?=null,val marketQuery:String="",val dailySales:List<DailySaleRow> = emptyList(),val dailyProfit:List<DailyProfitRow> = emptyList(),val stockValue:StockValueRow?=null,val purchaseItems:List<PurchaseListEntity> = emptyList(),val dues:Pair<Long,Int>?=null,val toast:String?=null,val error:String?=null,val offline:Boolean=false,val scanning:Boolean=false,val returnTo:String?=null,val pendingRole:String?=null,val booting:Boolean=false)
+data class UiState(val screen:String="login",val busy:Boolean=false,val drawerOpen:Boolean=false,val profile:LocalProfile?=null,val shops:List<LocalShop> = emptyList(),val products:List<ProductRow> = emptyList(),val selectedShopId:String?=null,val editing:ProductRow?=null,val editingShop:LocalShop?=null,val currentImage:ByteArray?=null,val quickSale:QuickSaleState=QuickSaleState(),val scanMessage:String?=null,val scanError:Boolean=false,val scannedGlobal:BarcodeResolution.Global?=null,val pendingBarcode:String?=null,val inventoryProduct:ProductRow?=null,val inventoryHistory:List<InventoryTransactionEntity> = emptyList(),val customers:List<ShopCustomerEntity> = emptyList(),val customer:ShopCustomerEntity?=null,val creditStatement:List<CreditTransactionEntity> = emptyList(),val marketShops:List<MarketShop> = emptyList(),val marketShop:MarketShop?=null,val marketProducts:List<MarketProduct> = emptyList(),val cart:Cart=Cart(),val addresses:List<OrderAddress> = emptyList(),val orders:List<OrderSummary> = emptyList(),val order:OrderDetail?=null,val shopOrders:List<OrderSummary> = emptyList(),val myCreditShops:List<MyCreditShop> = emptyList(),val myCreditEntries:List<MyCreditEntry> = emptyList(),val customerSales:List<SaleEntity> = emptyList(),val saleSuccess:SaleSuccess?=null,val receipt:ReceiptData?=null,val finance:FinanceSummary?=null,val marketQuery:String="",val dailySales:List<DailySaleRow> = emptyList(),val dailyProfit:List<DailyProfitRow> = emptyList(),val stockValue:StockValueRow?=null,val purchaseItems:List<PurchaseListEntity> = emptyList(),val dues:Pair<Long,Int>?=null,val toast:String?=null,val error:String?=null,val offline:Boolean=false,val scanning:Boolean=false,val voiceListening:Boolean=false,val voiceHeard:String?=null,val voiceConfirm:SaleOption?=null,val voiceChoices:List<SaleOption> = emptyList(),val voiceAnswer:String?=null,val voiceError:String?=null,val returnTo:String?=null,val pendingRole:String?=null,val booting:Boolean=false)
 
 class MainViewModel(private val r:AppRepository):ViewModel(){
  private val _s=MutableStateFlow(UiState(screen=if(r.loggedIn())"boot" else "login",booting=r.loggedIn()));val state=_s.asStateFlow()
@@ -222,7 +233,7 @@ class MainViewModel(private val r:AppRepository):ViewModel(){
  fun useWalkIn(){_s.update{it.copy(quickSale=it.quickSale.walkInCustomer())}}
  /** Naya chhota customer form (naam+mobile) — save ke baad wahi cart par wapas, customer pehle se chuna hua. */
  fun saveQuickCustomer(name:String,mobile:String)=run{val shop=_s.value.selectedShopId?:error("No shop selected");val row=r.quickAddCustomer(shop,name,mobile);_s.update{it.copy(screen="posCheckout",quickSale=it.quickSale.copy(shopCustomerId=row.id,walkIn=false,customerName=row.displayName,customerPhone=row.normalizedPhone),toast="✓ Customer saved")}}
- fun completeSale()=run{val shop=_s.value.selectedShopId?:error("No shop selected");val q=_s.value.quickSale;if(q.udhaariRequiresCustomer){_s.update{it.copy(error="Please add customer details for Udhaari.")};return@run};val saleId=r.completeQuickSale(shop,q);val line=q.lines.values.firstOrNull();val due=q.paymentMode==SalePaymentMode.CREDIT;_s.update{it.copy(screen="saleSuccess",saleSuccess=SaleSuccess(saleId,q.totalPaise,q.subtotalPaise,q.discountPaise,q.method.label,if(q.walkIn)"Walk-in Customer" else (q.customerName?:"Customer"),if(due)0L else q.totalPaise,if(due)q.totalPaise else 0L),quickSale=QuickSaleState(),toast="✓ Sale Completed")}}
+ fun completeSale()=run{val shop=_s.value.selectedShopId?:error("No shop selected");val q=_s.value.quickSale;if(q.udhaariRequiresCustomer){_s.update{it.copy(error="Please add customer details for Udhaari.")};return@run};val saleId=r.completeQuickSale(shop,q);val line=q.lines.values.firstOrNull();val due=q.paymentMode==SalePaymentMode.CREDIT;_s.update{it.copy(screen="saleSuccess",saleSuccess=SaleSuccess(saleId,q.totalPaise,q.subtotalPaise,q.discountPaise,q.method.label,if(q.walkIn)"Walk-in Customer" else (q.customerName?:"Customer"),if(due)0L else q.totalPaise,if(due)q.totalPaise else 0L,q.estimatedProfitPaise),quickSale=QuickSaleState(),toast="✓ Sale Completed")}}
  fun newSale(){_s.update{it.copy(screen="quickSale",saleSuccess=null,receipt=null)}}
  fun openReceipt(saleId:String)=run{val shop=_s.value.selectedShopId?:_s.value.shops.firstOrNull()?.id?:return@run;_s.update{it.copy(screen="receipt",receipt=r.receiptData(shop,saleId))}}
  fun shareReceipt(){val rD=_s.value.receipt?:return;val sb=StringBuilder();sb.appendLine("*${rD.shopName}*");rD.shopLine?.let{sb.appendLine(it)};sb.appendLine();sb.appendLine(java.text.SimpleDateFormat("dd MMM yyyy, hh:mm a",java.util.Locale.getDefault()).format(java.util.Date(rD.createdAt)));sb.appendLine("Invoice: ${rD.id.takeLast(8).uppercase()}");sb.appendLine();rD.items.forEach{sb.appendLine("${it.name} × ${ProductRules.quantity(it.quantityMilli)} = ${ProductRules.rupees(it.lineTotalPaise)}")};sb.appendLine();if(rD.discountPaise>0){sb.appendLine("Subtotal: ${ProductRules.rupees(rD.subtotalPaise)}");sb.appendLine("Discount: -${ProductRules.rupees(rD.discountPaise)}")};sb.appendLine("Total: ${ProductRules.rupees(rD.totalPaise)}");sb.appendLine("Payment: ${rD.methodLabel}");sb.appendLine("Customer: ${rD.customerLabel}");if(rD.duePaise>0){sb.appendLine("Paid: ₹0.00");sb.appendLine("Due: ${ProductRules.rupees(rD.duePaise)}")};if(rD.pendingSync)sb.appendLine("(offline — sync pending)");r.shareReceiptText(sb.toString())}
@@ -256,6 +267,55 @@ class MainViewModel(private val r:AppRepository):ViewModel(){
   fun saveShopEdit(name:String,owner:String,address:String,locality:String,city:String,pincode:String,phone:String,desc:String)=run{val shop=_s.value.editingShop?:error("No shop selected");require(name.isNotBlank()&&owner.isNotBlank()&&address.isNotBlank()&&locality.isNotBlank()&&city.isNotBlank()){"Naam, owner, pata, locality, sheher zaroori hai"};require(pincode.matches(Regex("[1-9]\\d{5}"))){"Sahi 6-digit pincode daalo"};r.saveShopProfile(shop,name,owner,address,locality,city,pincode,phone,desc);_s.update{it.copy(screen="dashboard",editingShop=null,toast="✓ Dukaan update ho gayi")}}
   fun logout()=run{r.logout();backStack.clear();_s.value=UiState("login");toast("Logged out")}
   fun openChangePin(){pushCurrent();_s.update{it.copy(screen="changePin",error=null)}}
+  /** Voice orders — Google STT se text, matlab apne rules se. Bina confirm ke koi action nahi. */
+  fun setVoiceListening(b:Boolean){_s.update{it.copy(voiceListening=b,voiceError=null)}}
+  fun clearVoice(){_s.update{it.copy(voiceHeard=null,voiceConfirm=null,voiceChoices=emptyList(),voiceAnswer=null,voiceError=null)}}
+  fun voicePickChoice(opt:SaleOption){_s.update{it.copy(voiceConfirm=opt,voiceChoices=emptyList())}}
+  fun voiceMicError(msg:String){_s.update{it.copy(voiceListening=false,voiceError=msg)}}
+  fun onVoiceText(text:String)=run{
+   val heard=text.trim();if(heard.isEmpty()){_s.update{it.copy(voiceError="Samajh nahi aaya")};return@run}
+   val shop=_s.value.selectedShopId?:_s.value.shops.firstOrNull()?.id
+   val cat=if(shop==null)emptyList() else r.productsSnapshot(shop)
+   _s.update{it.copy(voiceHeard=heard,voiceError=null,voiceAnswer=null)}
+   when(val cmd=VoiceParser.parse(heard,cat)){
+    is VoiceCmd.Sale->{
+     if(shop==null){_s.update{it.copy(voiceError="Pehle apni dukaan kholo")};return@run}
+     val row=cat.firstOrNull{it.shopProduct.id==cmd.option.productId}
+     val avail=(row?.shopProduct?.stockQuantityMilli?:0)-(row?.shopProduct?.reservedQuantityMilli?:0)
+     if(row==null||avail-cmd.option.quantityMilli<0){_s.update{it.copy(voiceError="${cmd.option.name} — stock me nahi hai")};return@run}
+     _s.update{it.copy(voiceConfirm=cmd.option,voiceChoices=emptyList())}
+    }
+    is VoiceCmd.SaleChoice->_s.update{it.copy(voiceChoices=cmd.options,voiceConfirm=null)}
+    is VoiceCmd.AskStock->{
+     val row=cmd.productId?.let{id->cat.firstOrNull{it.shopProduct.id==id}}
+     _s.update{it.copy(voiceAnswer=if(row!=null)"${row.product.name} — stock ${ProductRules.quantity(row.shopProduct.stockQuantityMilli)} ${row.product.unit}" else if(cmd.name!=null)"${cmd.name} — dukaan me nahi mila" else "Naam sunai nahi diya — phir bolo")}
+    }
+    is VoiceCmd.AskProfit->{
+     if(shop==null){_s.update{it.copy(voiceError="Pehle apni dukaan kholo")};return@run}
+     val p=r.profitEstimate(shop,ReportMath.todayEpochDay()*86_400_000L)
+     _s.update{it.copy(voiceAnswer=if(p!=null)"Aaj ka munafa ${ProductRules.rupees(p)}" else "Cost price set nahi hai — munafa nahi nikal sakta")}
+    }
+    is VoiceCmd.AskDues->{
+     val d=if(shop==null)0L to 0 else r.duesPair(shop)
+     _s.update{it.copy(voiceAnswer="Kul udhaar ${ProductRules.rupees(d.first)} (${d.second} grahak)")}
+    }
+    is VoiceCmd.FindCustomer->{
+     val row=_s.value.customers.firstOrNull{it.displayName.contains(cmd.query,true)}
+     if(row!=null){clearVoice();openCustomer(row)} else _s.update{it.copy(voiceAnswer="\"${cmd.query}\" naam ka customer nahi mila")}
+    }
+    is VoiceCmd.OpenReports->{clearVoice();openReports()}
+    is VoiceCmd.Yes->{val opt=_s.value.voiceConfirm;if(opt!=null)voiceConfirmSale(opt) else _s.update{it.copy(voiceError="Pehle koi sale confirm karo")}}
+    is VoiceCmd.No->clearVoice()
+    is VoiceCmd.Unknown->_s.update{it.copy(voiceError="Samajh nahi aaya — phir bolo")}
+   }
+  }
+  fun voiceConfirmSale(opt:SaleOption)=run{
+   val shop=_s.value.selectedShopId?:_s.value.shops.firstOrNull()?.id?:error("No shop selected")
+   val row=r.productsSnapshot(shop).firstOrNull{it.shopProduct.id==opt.productId}?:error("Product nahi mila")
+   val line=QuickSaleLine(opt.productId,opt.name,row.product.unit,row.shopProduct.sellingPricePaise,opt.quantityMilli,row.shopProduct.costPricePaise)
+   _s.update{it.copy(quickSale=QuickSaleState(lines=mapOf(opt.productId to line)),selectedShopId=shop,voiceConfirm=null,voiceChoices=emptyList(),voiceHeard=null)}
+   completeSale()
+  }
   fun changePin(current:String,next:String,confirm:String)=run{require(next==confirm){"Naya PIN aur confirm PIN mil nahi rahe"};require(next!=current){"Naya PIN purane se alag rakho"};require(next.matches(Regex("\\d{4}|\\d{6}"))){"PIN sirf 4 ya 6 ank ka ho"};r.changePin(current,next,confirm);_s.update{it.copy(toast="✓ PIN badal gaya")}}
  private fun pushCurrent(){val cur=_s.value.screen;if(cur=="boot")return;if(backStack.lastOrNull()!=cur)backStack.addLast(cur);if(backStack.size>12)backStack.removeFirst()}
 }
@@ -301,7 +361,7 @@ class MainActivity:ComponentActivity(){
        "lowStock"->LowStockScreen(s,{vm.addPurchase(it)},{vm.openPurchaseList()})
        "purchaseList"->PurchaseListScreen(s,{vm.togglePurchase(it)},{vm.deletePurchase(it)},{vm.openLowStock()})
       "inventory"->InventoryScreen(s,{q,t,n->vm.adjustInventory(q,t,n)})
-       "quickSale"->QuickSaleScreen(s,{vm.scan(it)},{id,q->vm.changeSaleQuantity(id,q)},{vm.addLine(it)},{vm.attachScanned()},{vm.show("posCart")},{vm.customersForSelected()})
+       "quickSale"->QuickSaleScreen(s,{vm.scan(it)},{id,q->vm.changeSaleQuantity(id,q)},{vm.addLine(it)},{vm.onVoiceText(it)},{vm.setVoiceListening(true)},{vm.setVoiceListening(false)},{vm.voiceMicError(it)},{vm.attachScanned()},{vm.show("posCart")},{vm.customersForSelected()})
       "posCart"->PosCartScreen(s,{id,q->vm.changeSaleQuantity(id,q)},{t->vm.setDiscount(t)},{vm.show("posCheckout")})
       "posCheckout"->PosCheckoutScreen(s,{m->vm.selectMethod(m)},{vm.useWalkIn()},{vm.show("quickAddCustomer")},{vm.completeSale()})
       "quickAddCustomer"->QuickAddCustomerForm(s,{n,m->vm.saveQuickCustomer(n,m)})
@@ -325,7 +385,9 @@ class MainActivity:ComponentActivity(){
     if(s.busy)LinearProgressIndicator(Modifier.fillMaxWidth().height(4.dp).align(Alignment.TopCenter))
     }
    }
-   // Drawer Scaffold ke sibling hai — poore viewport (top bar + bottom nav dono) ke UPAR overlay hota hai
+    // Voice cards har screen ke upar-neeche float karte hain (drawer ke neeche).
+    Box(Modifier.fillMaxSize().align(Alignment.BottomCenter)){VoiceOverlay(s,{opt->vm.voiceConfirmSale(opt)},{opt->vm.voicePickChoice(opt)},{vm.clearVoice()})}
+    // Drawer Scaffold ke sibling hai — poore viewport (top bar + bottom nav dono) ke UPAR overlay hota hai
     DrawerOverlay(s,{vm.closeDrawer()},{id->vm.closeDrawer();vm.openDashboard(id)},{vm.closeDrawer();vm.openMarket()},{vm.closeDrawer();vm.openOrders()},{vm.closeDrawer();vm.openShopOrdersSafe()},{vm.closeDrawer();vm.openReports()},{vm.closeDrawer();vm.openChangePin()},{vm.logout()})
   }
  }}
@@ -478,12 +540,13 @@ fun drawerIdentity(profile:LocalProfile?,shops:List<LocalShop>,selectedShopId:St
  }}
 /** POS — Scan/Search → grid → tap-to-add. Bahut kam text, bade touch targets. */
 /** POS — Scan/Search → grid → tap-to-add. Bahut kam text, bade touch targets. */
-@Composable fun QuickSaleScreen(s:UiState,onScan:(String)->Unit,onQuantity:(String,Long)->Unit,addLine:(ProductRow)->Unit,createProduct:()->Unit,openCart:()->Unit,openCustomers:()->Unit){
+@Composable fun QuickSaleScreen(s:UiState,onScan:(String)->Unit,onQuantity:(String,Long)->Unit,addLine:(ProductRow)->Unit,onMicHeard:(String)->Unit,onMicStart:()->Unit,onMicStop:()->Unit,onMicError:(String)->Unit,createProduct:()->Unit,openCart:()->Unit,openCustomers:()->Unit){
  var scanning by remember{mutableStateOf(false)};var query by remember{mutableStateOf("")}
  val shown=s.products.filter{query.isBlank()||it.product.name.contains(query,true)||it.product.brand.orEmpty().contains(query,true)||it.product.barcode.orEmpty().contains(query,true)}
  Column(Modifier.fillMaxSize()){
   Row(Modifier.fillMaxWidth().padding(horizontal=16.dp),horizontalArrangement=Arrangement.spacedBy(8.dp),verticalAlignment=Alignment.CenterVertically){
    OutlinedTextField(query,{query=it},placeholder={Text(stringResource(R.string.search_products))},leadingIcon={Text("🔍",fontSize=16.sp)},modifier=Modifier.weight(1f),shape=RoundedCornerShape(14.dp),singleLine=true)
+   VoiceMicButton(s.voiceListening,onMicHeard,onMicStart,onMicStop,onMicError)
    Button({scanning=!scanning},Modifier.height(56.dp),colors=ButtonDefaults.buttonColors(containerColor=DukaanColors.Navy),shape=RoundedCornerShape(14.dp)){Text(if(scanning)"✕" else "📷",fontSize=20.sp)}
   }
   if(scanning){`in`.localdukaan.feature.BarcodeScanner(true,onScan,Modifier.fillMaxWidth().padding(horizontal=16.dp,vertical=8.dp).aspectRatio(16f/9f).clip(RoundedCornerShape(14.dp)))}
@@ -504,6 +567,46 @@ fun drawerIdentity(profile:LocalProfile?,shops:List<LocalShop>,selectedShopId:St
    Button(openCart,Modifier.height(52.dp),colors=ButtonDefaults.buttonColors(containerColor=BrandGreen),shape=RoundedCornerShape(14.dp)){Text("🛒 "+stringResource(R.string.view_cart),fontWeight=FontWeight.Bold,fontSize=15.sp)}}}
   else Spacer(Modifier.height(12.dp))
 }}
+/** 🎙 Voice orders — mic dabao, bolo, screen par confirm karo. Awaz record nahi hoti, sirf text samjha jata hai. */
+@Composable fun VoiceMicButton(listening:Boolean,onHeard:(String)->Unit,onStart:()->Unit,onStop:()->Unit,onMicError:(String)->Unit){
+ val context=androidx.compose.ui.platform.LocalContext.current
+ val listener=remember(context){VoiceListener(context)}
+ var hasMic by remember{mutableStateOf(ContextCompat.checkSelfPermission(context,Manifest.permission.RECORD_AUDIO)==PackageManager.PERMISSION_GRANTED)}
+ val failMsg={f:VoiceFail->when(f){VoiceFail.NOT_SUPPORTED->context.getString(R.string.voice_no_support);VoiceFail.NO_MIC->context.getString(R.string.voice_need_mic);VoiceFail.NEEDS_NET->context.getString(R.string.voice_need_net);VoiceFail.NO_SPEECH->context.getString(R.string.voice_not_understood);VoiceFail.BUSY->context.getString(R.string.voice_listening)}}
+ fun begin(){
+  if(!SpeechRecognizer.isRecognitionAvailable(context)){onMicError(context.getString(R.string.voice_no_support));return}
+  onStart()
+  listener.start{res->when(res){
+   is VoiceListenResult.Heard->{onHeard(res.text);if(res.final){listener.stop();onStop()}}
+   is VoiceListenResult.Failed->{listener.stop();onStop();onMicError(failMsg(res.reason))}
+  }}
+ }
+ val perm=androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestPermission()){granted->hasMic=granted;if(granted)begin() else onMicError(context.getString(R.string.voice_need_mic))}
+ androidx.compose.runtime.DisposableEffect(Unit){onDispose{listener.stop();onStop()}}
+ Button(onClick={if(listening){listener.stop();onStop()}else{if(!hasMic)perm.launch(Manifest.permission.RECORD_AUDIO) else begin()}},Modifier.height(56.dp),colors=ButtonDefaults.buttonColors(containerColor=if(listening)BrandRed else BrandGreen),shape=RoundedCornerShape(14.dp)){Text(if(listening)"⏺" else "🎙",fontSize=20.sp)}
+}
+/** Voice overlay — har screen ke upar: sunna, confirm, choice, jawab. Koi auto-sale nahi. */
+@Composable fun VoiceOverlay(s:UiState,confirm:(SaleOption)->Unit,pick:(SaleOption)->Unit,dismiss:()->Unit){
+ val showListen=s.voiceListening||s.voiceHeard!=null;val showConfirm=s.voiceConfirm!=null;val showChoices=s.voiceChoices.isNotEmpty();val showAnswer=s.voiceAnswer!=null;val showError=s.voiceError!=null
+ if(!showListen&&!showConfirm&&!showChoices&&!showAnswer&&!showError)return
+ Column(Modifier.fillMaxWidth().padding(horizontal=16.dp,vertical=8.dp),verticalArrangement=Arrangement.spacedBy(8.dp)){
+  if(s.voiceListening)Card(Modifier.fillMaxWidth(),shape=RoundedCornerShape(16.dp),colors=CardDefaults.cardColors(containerColor=DukaanColors.Navy)){Row(Modifier.padding(14.dp),verticalAlignment=Alignment.CenterVertically){Text("🎙",fontSize=22.sp);Spacer(Modifier.width(10.dp));Column(Modifier.weight(1f)){Text(stringResource(R.string.voice_listening),color=Color.White,fontWeight=FontWeight.Bold);s.voiceHeard?.let{Text("“$it”",color=Color(0xFFC7F0D2),fontSize=13.sp,maxLines=2,overflow=androidx.compose.ui.text.style.TextOverflow.Ellipsis)}}}}
+  s.voiceConfirm?.let{opt->
+   val row=s.products.firstOrNull{it.shopProduct.id==opt.productId}
+   val total=opt.unitPricePaise*opt.quantityMilli/1000;val profit=if((row?.shopProduct?.costPricePaise?:0)>0)(opt.unitPricePaise-row!!.shopProduct.costPricePaise)*opt.quantityMilli/1000 else 0L
+   Card(Modifier.fillMaxWidth(),shape=RoundedCornerShape(18.dp),colors=CardDefaults.cardColors(containerColor=Color.White),elevation=CardDefaults.cardElevation(6.dp)){Column(Modifier.padding(16.dp)){
+    Text("🎙 "+stringResource(R.string.voice_confirm_sale),fontWeight=FontWeight.ExtraBold,fontSize=16.sp,color=DukaanColors.Dark)
+    Spacer(Modifier.height(6.dp));Text("${opt.name} × ${ProductRules.quantity(opt.quantityMilli)} = ${ProductRules.rupees(total)}",fontWeight=FontWeight.Bold,color=DukaanColors.Navy)
+    if(profit>0)Text("📈 "+stringResource(R.string.voice_sale_profit)+": ${ProductRules.rupees(profit)}",fontSize=13.sp,color=BrandGreenDark,fontWeight=FontWeight.SemiBold)
+    Spacer(Modifier.height(10.dp));Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){Button({confirm(opt)},Modifier.weight(1f),colors=ButtonDefaults.buttonColors(containerColor=BrandGreen),shape=RoundedCornerShape(12.dp)){Text("✓ "+stringResource(R.string.voice_sell),fontWeight=FontWeight.Bold)};OutlinedButton(dismiss,Modifier.weight(1f),shape=RoundedCornerShape(12.dp)){Text("✕ "+stringResource(R.string.voice_no))}}
+    Text("\"${stringResource(R.string.voice_yes)}\" bolo ya button dabao",fontSize=11.sp,color=DukaanColors.Slate500)
+   }}
+  }
+  if(showChoices)Card(Modifier.fillMaxWidth(),shape=RoundedCornerShape(18.dp),colors=CardDefaults.cardColors(containerColor=Color.White),elevation=CardDefaults.cardElevation(6.dp)){Column(Modifier.padding(12.dp)){Text("Kaun sa wala?",fontWeight=FontWeight.Bold);s.voiceChoices.forEach{opt->Row(Modifier.fillMaxWidth().clickable{pick(opt)}.padding(vertical=8.dp,horizontal=4.dp),verticalAlignment=Alignment.CenterVertically){Column(Modifier.weight(1f)){Text(opt.name,fontWeight=FontWeight.SemiBold,maxLines=1,overflow=androidx.compose.ui.text.style.TextOverflow.Ellipsis);Text(ProductRules.rupees(opt.unitPricePaise),fontSize=12.sp,color=BrandGreenDark)};Text("›",fontSize=20.sp,color=DukaanColors.Slate400)}}}}
+  s.voiceAnswer?.let{ans->Card(Modifier.fillMaxWidth(),shape=RoundedCornerShape(16.dp),colors=CardDefaults.cardColors(containerColor=DukaanColors.LightGreen)){Row(Modifier.padding(14.dp),verticalAlignment=Alignment.CenterVertically){Text("🔊",fontSize=20.sp);Spacer(Modifier.width(10.dp));Text(ans,Modifier.weight(1f),fontWeight=FontWeight.SemiBold,color=DukaanColors.Dark);TextButton(dismiss){Text("OK",color=DukaanColors.Navy,fontWeight=FontWeight.Bold)}}}}
+  s.voiceError?.let{err->Card(Modifier.fillMaxWidth(),shape=RoundedCornerShape(16.dp),colors=CardDefaults.cardColors(containerColor=DukaanColors.LightRed)){Row(Modifier.padding(14.dp),verticalAlignment=Alignment.CenterVertically){Text("⚠️",fontSize=20.sp);Spacer(Modifier.width(10.dp));Text(err,Modifier.weight(1f),color=Color(0xFF991B1B));TextButton(dismiss){Text("OK",color=Color(0xFF991B1B),fontWeight=FontWeight.Bold)}}}}
+ }
+}
 @Composable fun ProductThumb(row:ProductRow){val key=row.shopProduct.imageKey
  if(key!=null&&key.startsWith("local-file:")){val bmp=remember(key){runCatching{android.graphics.BitmapFactory.decodeFile(key.removePrefix("local-file:"))}.getOrNull()};if(bmp!=null){androidx.compose.foundation.Image(bmp.asImageBitmap(),null,modifier=Modifier.fillMaxSize(),contentScale=androidx.compose.ui.layout.ContentScale.Crop);return}}
  Text("📦",fontSize=30.sp)}
@@ -684,7 +787,8 @@ fun drawerIdentity(profile:LocalProfile?,shops:List<LocalShop>,selectedShopId:St
   Spacer(Modifier.height(4.dp));Text(ProductRules.rupees(x.totalPaise),style=MaterialTheme.typography.displaySmall,fontWeight=FontWeight.ExtraBold,color=DukaanColors.Navy)
   if(x.discountPaise>0)Text(stringResource(R.string.discount)+": -"+ProductRules.rupees(x.discountPaise),color=BrandGreenDark,fontWeight=FontWeight.SemiBold)
   Spacer(Modifier.height(10.dp));Text(stringResource(R.string.payment_method)+": "+x.methodLabel,color=DukaanColors.Slate600);Text(stringResource(R.string.customer)+": "+x.customerLabel,color=DukaanColors.Slate600)
-  if(x.duePaise>0){Spacer(Modifier.height(6.dp));Text("💰 "+stringResource(R.string.due)+": "+ProductRules.rupees(x.duePaise),color=BrandRed,fontWeight=FontWeight.Bold)}
+   if(x.duePaise>0){Spacer(Modifier.height(6.dp));Text("💰 "+stringResource(R.string.due)+": "+ProductRules.rupees(x.duePaise),color=BrandRed,fontWeight=FontWeight.Bold)}
+   if(x.profitPaise>0){Spacer(Modifier.height(6.dp));Text("📈 "+stringResource(R.string.voice_sale_profit)+": "+ProductRules.rupees(x.profitPaise),color=BrandGreenDark,fontWeight=FontWeight.Bold)}
   Spacer(Modifier.height(28.dp));GradientButton("🛒  "+stringResource(R.string.new_sale),true,newSale);Spacer(Modifier.height(8.dp));ActionButton("🧾 "+stringResource(R.string.view_receipt),viewReceipt)}}
 /** Saaf digital receipt — shop, items, total, payment, customer; Share support. */
 @Composable fun ReceiptScreen(s:UiState,share:()->Unit){val rD=s.receipt?:return

@@ -16,8 +16,8 @@ android {
         applicationId = "in.localdukaan"
         minSdk = 26
         targetSdk = 35
-        versionCode = 13
-        versionName = "1.10.0"
+        versionCode = 14
+        versionName = "1.11.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "API_BASE_URL", "\"${project.findProperty("LOCALDUKAAN_API_URL") ?: "https://localdukaan-api.premdeep336.workers.dev"}\"")
     }
