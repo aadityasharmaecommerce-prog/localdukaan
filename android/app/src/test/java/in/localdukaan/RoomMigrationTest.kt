@@ -24,7 +24,7 @@ class RoomMigrationTest {
    db.execSQL("INSERT INTO local_shop VALUES('shop-1','Existing Shop','Ghaziabad','Indirapuram','ACTIVE',1)")
    db.execSQL("INSERT INTO local_profile VALUES('user-1','Owner','en',0,1,1)")
   };override fun onUpgrade(db:SupportSQLiteDatabase,oldVersion:Int,newVersion:Int){}}).build());helper.writableDatabase;helper.close()
-  val room=Room.databaseBuilder(context,LocalDatabase::class.java,name).addMigrations(LocalDatabase.MIGRATION_1_2,LocalDatabase.MIGRATION_2_3,LocalDatabase.MIGRATION_3_4,LocalDatabase.MIGRATION_4_5,LocalDatabase.MIGRATION_5_6).allowMainThreadQueries().build()
+   val room=Room.databaseBuilder(context,LocalDatabase::class.java,name).addMigrations(LocalDatabase.MIGRATION_1_2,LocalDatabase.MIGRATION_2_3,LocalDatabase.MIGRATION_3_4,LocalDatabase.MIGRATION_4_5,LocalDatabase.MIGRATION_5_6,LocalDatabase.MIGRATION_6_7).allowMainThreadQueries().build()
   val shops=room.dao().shops().first();assertEquals(1,shops.size);assertEquals("Existing Shop",shops.single().name);assertEquals("",shops.single().ownerName)
   val tables=room.openHelper.readableDatabase.query("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('products','shop_products','inventory_transactions')").use{c->buildSet{while(c.moveToNext())add(c.getString(0))}}
   assertEquals(setOf("products","shop_products","inventory_transactions"),tables);assertTrue(room.dao().products("shop-1").first().isEmpty());room.close()

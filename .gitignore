@@ -1,10 +1,14 @@
-﻿node_modules/
+node_modules/
 **/node_modules/
 .gradle/
 **/.gradle/
 build/
 **/build/
 local.properties
+keystore.properties
+.dev.vars
+admin_token.txt
+.wrangler/
 .env
 .env.*
 !.env.example

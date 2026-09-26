@@ -5,7 +5,7 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.flow.Flow
 @Entity(tableName="local_profile") data class LocalProfile(@PrimaryKey val userId:String,val name:String,val language:String,val customer:Boolean,val shopkeeper:Boolean,val synced:Boolean)
-@Entity(tableName="local_shop") data class LocalShop(@PrimaryKey val id:String,val name:String,val city:String,val locality:String,val status:String,val synced:Boolean,val ownerName:String="",val phone:String?=null,val addressLine:String="",val pincode:String="",val description:String?=null,val publicSlug:String?=null,val isPublished:Boolean=false,val version:Long=1)
+@Entity(tableName="local_shop") data class LocalShop(@PrimaryKey val id:String,val name:String,val city:String,val locality:String,val status:String,val synced:Boolean,val ownerName:String="",val phone:String?=null,val addressLine:String="",val pincode:String="",val description:String?=null,val publicSlug:String?=null,val isPublished:Boolean=false,val version:Long=1,val subscriptionStatus:String="TRIAL",val trialEndsAt:Long=0)
 @Entity(tableName="products",indices=[Index("barcode")]) data class ProductEntity(@PrimaryKey val id:String,val barcode:String?,val name:String,val brand:String?,val unit:String,val description:String?,val updatedAt:Long,val category:String?=null)
 @Entity(tableName="shop_products",indices=[Index("shopId"),Index("productId"),Index(value=["shopId","productId"],unique=true)]) data class ShopProductEntity(@PrimaryKey val id:String,val shopId:String,val productId:String,val sellingPricePaise:Long,val stockQuantityMilli:Long,val reservedQuantityMilli:Long,val minimumStockMilli:Long,val isAvailable:Boolean,val isArchived:Boolean,val imageKey:String?,val version:Long,val syncState:String,val updatedAt:Long,val costPricePaise:Long=0)
 @Entity(tableName="inventory_transactions",indices=[Index("shopId"),Index("shopProductId"),Index(value=["shopId","mutationId"],unique=true)]) data class InventoryTransactionEntity(@PrimaryKey val id:String,val shopId:String,val shopProductId:String,val type:String,val quantityDeltaMilli:Long,val stockAfterMilli:Long,val mutationId:String,val createdAt:Long)
@@ -30,10 +30,10 @@ data class StockValueRow(val totalStockValuePaise:Long,val totalItems:Int,val lo
  @Query("SELECT * FROM products WHERE barcode IN (:codes) LIMIT 1") suspend fun catalogueByBarcode(codes:List<String>):ProductEntity?
  @Query("SELECT * FROM inventory_transactions WHERE shopId=:shopId AND shopProductId=:shopProductId ORDER BY createdAt DESC") fun inventory(shopId:String,shopProductId:String):Flow<List<InventoryTransactionEntity>>
  @Query("SELECT * FROM sales WHERE shopId=:shopId ORDER BY createdAt DESC") fun sales(shopId:String):Flow<List<SaleEntity>>
- @Query("SELECT * FROM sales WHERE mutationId=:mutation LIMIT 1") fun saleByMutation(mutation:String):SaleEntity?
- @Query("SELECT * FROM sale_items WHERE saleId=:saleId") suspend fun saleItems(saleId:String):List<SaleItemEntity>
- @Query("DELETE FROM sales WHERE id=:id") fun deleteSale(id:String)
- @Query("DELETE FROM sale_items WHERE saleId=:saleId") fun deleteSaleItems(saleId:String)
+  @Query("SELECT * FROM sales WHERE mutationId=:mutation LIMIT 1") suspend fun saleByMutation(mutation:String):SaleEntity?
+  @Query("SELECT * FROM sale_items WHERE saleId=:saleId") suspend fun saleItems(saleId:String):List<SaleItemEntity>
+  @Query("DELETE FROM sales WHERE id=:id") suspend fun deleteSale(id:String)
+  @Query("DELETE FROM sale_items WHERE saleId=:saleId") suspend fun deleteSaleItems(saleId:String)
  @Query("SELECT * FROM purchase_list WHERE shopId=:shopId ORDER BY isPurchased,updatedAt DESC") fun purchaseList(shopId:String):Flow<List<PurchaseListEntity>>
  @Query("SELECT * FROM shop_customers WHERE shopId=:shopId AND isArchived=0 ORDER BY displayName") fun customers(shopId:String):Flow<List<ShopCustomerEntity>>
  @Query("SELECT * FROM credit_transactions WHERE shopId=:shopId AND shopCustomerId=:customerId ORDER BY createdAt DESC") fun creditStatement(shopId:String,customerId:String):Flow<List<CreditTransactionEntity>>
@@ -60,7 +60,10 @@ data class StockValueRow(val totalStockValuePaise:Long,val totalItems:Int,val lo
  @Insert(onConflict=OnConflictStrategy.REPLACE) suspend fun putCredit(v:CreditTransactionEntity)
  @Query("UPDATE shop_customers SET currentBalancePaise=:balance,syncState=:state,version=:version WHERE id=:id") suspend fun setCreditBalance(id:String,balance:Long,state:String,version:Long)
  @Insert(onConflict=OnConflictStrategy.REPLACE) suspend fun putPurchaseItem(v:PurchaseListEntity)
- @Query("DELETE FROM purchase_list WHERE id=:id") suspend fun deletePurchaseItem(id:String)
+  @Query("DELETE FROM purchase_list WHERE id=:id") suspend fun deletePurchaseItem(id:String)
+  @Query("SELECT * FROM purchase_list WHERE id=:id LIMIT 1") suspend fun purchaseItem(id:String):PurchaseListEntity?
+  @Query("SELECT * FROM purchase_list WHERE shopId=:shopId AND syncState='SYNCED'") suspend fun syncedPurchaseItems(shopId:String):List<PurchaseListEntity>
+  @Query("UPDATE purchase_list SET isPurchased=:purchased,syncState=:state,updatedAt=:now WHERE id=:id") suspend fun setPurchaseState(id:String,purchased:Boolean,state:String,now:Long)
  @Query("UPDATE shop_products SET isArchived=1,isAvailable=0,syncState='PENDING' WHERE id=:id") suspend fun archiveProduct(id:String)
  @Query("DELETE FROM shop_products WHERE id=:id") suspend fun deleteShopProduct(id:String)
  @Query("DELETE FROM products WHERE id=:id") suspend fun deleteProduct(id:String)
@@ -94,9 +97,19 @@ data class StockValueRow(val totalStockValuePaise:Long,val totalItems:Int,val lo
  @Query("DELETE FROM customers WHERE id NOT IN (SELECT customerId FROM shop_customers)") suspend fun deleteOrphanCustomers()
  @Query("DELETE FROM shop_products WHERE shopId NOT IN (:ids)") suspend fun deleteShopProductsNotInShops(ids:List<String>)
  @Query("DELETE FROM products WHERE id NOT IN (SELECT productId FROM shop_products)") suspend fun deleteOrphanProducts()
- @Query("DELETE FROM local_shop WHERE id NOT IN (:ids)") suspend fun deleteShopsNotIn(ids:List<String>)
+  @Query("DELETE FROM local_shop WHERE id NOT IN (:ids)") suspend fun deleteShopsNotIn(ids:List<String>)
+  @Query("DELETE FROM sale_items") suspend fun deleteAllSaleItems()
+  @Query("DELETE FROM sales") suspend fun deleteAllSales()
+  @Query("DELETE FROM inventory_transactions") suspend fun deleteAllInventory()
+  @Query("DELETE FROM credit_transactions") suspend fun deleteAllCredit()
+  @Query("DELETE FROM purchase_list") suspend fun deleteAllPurchase()
+  @Query("DELETE FROM shop_customers") suspend fun deleteAllShopCustomers()
+  @Query("DELETE FROM customers") suspend fun deleteAllCustomers()
+  @Query("DELETE FROM shop_products") suspend fun deleteAllShopProducts()
+  @Query("DELETE FROM products") suspend fun deleteAllProducts()
+  @Query("DELETE FROM local_shop") suspend fun deleteAllShops()
 }
-@Database(entities=[LocalProfile::class,LocalShop::class,ProductEntity::class,ShopProductEntity::class,InventoryTransactionEntity::class,SaleEntity::class,SaleItemEntity::class,CustomerEntity::class,ShopCustomerEntity::class,CreditTransactionEntity::class,PurchaseListEntity::class,Outbox::class],version=6,exportSchema=true)
+@Database(entities=[LocalProfile::class,LocalShop::class,ProductEntity::class,ShopProductEntity::class,InventoryTransactionEntity::class,SaleEntity::class,SaleItemEntity::class,CustomerEntity::class,ShopCustomerEntity::class,CreditTransactionEntity::class,PurchaseListEntity::class,Outbox::class],version=7,exportSchema=true)
 abstract class LocalDatabase:RoomDatabase(){abstract fun dao():LocalDao
  companion object {val MIGRATION_1_2=object:Migration(1,2){override fun migrate(db:SupportSQLiteDatabase){
   db.execSQL("ALTER TABLE local_shop ADD COLUMN ownerName TEXT NOT NULL DEFAULT ''");db.execSQL("ALTER TABLE local_shop ADD COLUMN phone TEXT");db.execSQL("ALTER TABLE local_shop ADD COLUMN addressLine TEXT NOT NULL DEFAULT ''");db.execSQL("ALTER TABLE local_shop ADD COLUMN pincode TEXT NOT NULL DEFAULT ''");db.execSQL("ALTER TABLE local_shop ADD COLUMN description TEXT");db.execSQL("ALTER TABLE local_shop ADD COLUMN publicSlug TEXT");db.execSQL("ALTER TABLE local_shop ADD COLUMN isPublished INTEGER NOT NULL DEFAULT 0");db.execSQL("ALTER TABLE local_shop ADD COLUMN version INTEGER NOT NULL DEFAULT 1");
@@ -107,4 +120,6 @@ abstract class LocalDatabase:RoomDatabase(){abstract fun dao():LocalDao
  val MIGRATION_5_6=object:Migration(5,6){override fun migrate(db:SupportSQLiteDatabase){
   db.execSQL("ALTER TABLE sales ADD COLUMN paymentMethod TEXT NOT NULL DEFAULT 'CASH'");db.execSQL("ALTER TABLE sales ADD COLUMN discountPaise INTEGER NOT NULL DEFAULT 0");db.execSQL("ALTER TABLE sales ADD COLUMN subtotalPaise INTEGER NOT NULL DEFAULT 0");db.execSQL("ALTER TABLE sales ADD COLUMN customerName TEXT");db.execSQL("ALTER TABLE sale_items ADD COLUMN costPricePaise INTEGER NOT NULL DEFAULT 0");db.execSQL("ALTER TABLE products ADD COLUMN category TEXT");
   db.execSQL("CREATE INDEX IF NOT EXISTS index_products_barcode ON products(barcode)")}}
- fun create(c:Context)=Room.databaseBuilder(c,LocalDatabase::class.java,"localdukaan.db").addMigrations(MIGRATION_1_2,MIGRATION_2_3,MIGRATION_3_4,MIGRATION_4_5,MIGRATION_5_6).build()}}
+   val MIGRATION_6_7=object:Migration(6,7){override fun migrate(db:SupportSQLiteDatabase){
+   db.execSQL("ALTER TABLE local_shop ADD COLUMN subscriptionStatus TEXT NOT NULL DEFAULT 'TRIAL'");db.execSQL("ALTER TABLE local_shop ADD COLUMN trialEndsAt INTEGER NOT NULL DEFAULT 0")}}
+  fun create(c:Context)=Room.databaseBuilder(c,LocalDatabase::class.java,"localdukaan.db").addMigrations(MIGRATION_1_2,MIGRATION_2_3,MIGRATION_3_4,MIGRATION_4_5,MIGRATION_5_6,MIGRATION_6_7).build()}}

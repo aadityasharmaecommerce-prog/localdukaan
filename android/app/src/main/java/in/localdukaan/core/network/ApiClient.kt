@@ -10,8 +10,9 @@ class ApiClient(private val token:()->String?){
  // Har call apna connection band karta hai. Pehle disconnect nahi hota tha, isliye lambi billing
  // session mein sockets/fd jama hote jaate the (scanner ek-ek barcode par lookup bhejta hai).
  private fun open(path:String)=(URL(BuildConfig.API_BASE_URL.trimEnd('/')+path).openConnection() as HttpURLConnection)
- private fun parse(c:HttpURLConnection,status:Int):JSONObject{
-  val text=(if(status in 200..299)c.inputStream else c.errorStream).bufferedReader().use{it.readText()}
+  private fun parse(c:HttpURLConnection,status:Int):JSONObject{
+   val stream=if(status in 200..299)c.inputStream else c.errorStream
+   val text=stream?.bufferedReader()?.use{it.readText()}?:""
   val out=if(text.isBlank())JSONObject() else JSONObject(text)
   if(status !in 200..299){val e=out.optJSONObject("error");throw ApiException(status,e?.optString("code")?:"HTTP_ERROR",e?.optString("message")?:"Request failed")}
   return out

@@ -13,6 +13,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
@@ -47,6 +48,7 @@ import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.Logout
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.ReceiptLong
@@ -98,11 +100,11 @@ val BrandRed = Color(0xFFDC2626)
 val BrandBg = Color(0xFFF6FAF7)
 val BrandCard = Color(0xFFEFF7F1)
 
-data class UiState(val screen:String="login",val busy:Boolean=false,val drawerOpen:Boolean=false,val profile:LocalProfile?=null,val shops:List<LocalShop> = emptyList(),val products:List<ProductRow> = emptyList(),val selectedShopId:String?=null,val editing:ProductRow?=null,val currentImage:ByteArray?=null,val quickSale:QuickSaleState=QuickSaleState(),val scanMessage:String?=null,val scanError:Boolean=false,val scannedGlobal:BarcodeResolution.Global?=null,val pendingBarcode:String?=null,val inventoryProduct:ProductRow?=null,val inventoryHistory:List<InventoryTransactionEntity> = emptyList(),val customers:List<ShopCustomerEntity> = emptyList(),val customer:ShopCustomerEntity?=null,val creditStatement:List<CreditTransactionEntity> = emptyList(),val marketShops:List<MarketShop> = emptyList(),val marketShop:MarketShop?=null,val marketProducts:List<MarketProduct> = emptyList(),val cart:Cart=Cart(),val addresses:List<OrderAddress> = emptyList(),val orders:List<OrderSummary> = emptyList(),val order:OrderDetail?=null,val shopOrders:List<OrderSummary> = emptyList(),val myCreditShops:List<MyCreditShop> = emptyList(),val myCreditEntries:List<MyCreditEntry> = emptyList(),val customerSales:List<SaleEntity> = emptyList(),val saleSuccess:SaleSuccess?=null,val receipt:ReceiptData?=null,val finance:FinanceSummary?=null,val marketQuery:String="",val dailySales:List<DailySaleRow> = emptyList(),val dailyProfit:List<DailyProfitRow> = emptyList(),val stockValue:StockValueRow?=null,val dues:Pair<Long,Int>?=null,val toast:String?=null,val error:String?=null,val offline:Boolean=false,val scanning:Boolean=false,val returnTo:String?=null,val pendingRole:String?=null,val booting:Boolean=false)
+data class UiState(val screen:String="login",val busy:Boolean=false,val drawerOpen:Boolean=false,val profile:LocalProfile?=null,val shops:List<LocalShop> = emptyList(),val products:List<ProductRow> = emptyList(),val selectedShopId:String?=null,val editing:ProductRow?=null,val editingShop:LocalShop?=null,val currentImage:ByteArray?=null,val quickSale:QuickSaleState=QuickSaleState(),val scanMessage:String?=null,val scanError:Boolean=false,val scannedGlobal:BarcodeResolution.Global?=null,val pendingBarcode:String?=null,val inventoryProduct:ProductRow?=null,val inventoryHistory:List<InventoryTransactionEntity> = emptyList(),val customers:List<ShopCustomerEntity> = emptyList(),val customer:ShopCustomerEntity?=null,val creditStatement:List<CreditTransactionEntity> = emptyList(),val marketShops:List<MarketShop> = emptyList(),val marketShop:MarketShop?=null,val marketProducts:List<MarketProduct> = emptyList(),val cart:Cart=Cart(),val addresses:List<OrderAddress> = emptyList(),val orders:List<OrderSummary> = emptyList(),val order:OrderDetail?=null,val shopOrders:List<OrderSummary> = emptyList(),val myCreditShops:List<MyCreditShop> = emptyList(),val myCreditEntries:List<MyCreditEntry> = emptyList(),val customerSales:List<SaleEntity> = emptyList(),val saleSuccess:SaleSuccess?=null,val receipt:ReceiptData?=null,val finance:FinanceSummary?=null,val marketQuery:String="",val dailySales:List<DailySaleRow> = emptyList(),val dailyProfit:List<DailyProfitRow> = emptyList(),val stockValue:StockValueRow?=null,val purchaseItems:List<PurchaseListEntity> = emptyList(),val dues:Pair<Long,Int>?=null,val toast:String?=null,val error:String?=null,val offline:Boolean=false,val scanning:Boolean=false,val returnTo:String?=null,val pendingRole:String?=null,val booting:Boolean=false)
 
 class MainViewModel(private val r:AppRepository):ViewModel(){
  private val _s=MutableStateFlow(UiState(screen=if(r.loggedIn())"boot" else "login",booting=r.loggedIn()));val state=_s.asStateFlow()
- private var customerJob:Job?=null;private var statementJob:Job?=null;private var productsJob:Job?=null;private var inventoryJob:Job?=null;private var salesJob:Job?=null
+  private var customerJob:Job?=null;private var statementJob:Job?=null;private var productsJob:Job?=null;private var inventoryJob:Job?=null;private var salesJob:Job?=null;private var purchaseJob:Job?=null
  private val backStack=ArrayDeque<String>()
  init{
   viewModelScope.launch{r.profile.collect{_s.update{x->x.copy(profile=it)}}}
@@ -161,7 +163,11 @@ class MainViewModel(private val r:AppRepository):ViewModel(){
    _s.update{s->s.copy(screen="quickSale",quickSale=found?.let{s.quickSale.scan(it)}?:s.quickSale,scanMessage=if(found!=null)"✓ ${found.product.name} cart mein add ho gaya" else "✓ Product save ho gaya",scanError=false,toast="✓ Product save ho gaya")}
   } else _s.update{it.copy(screen="products",toast="✓ Product save ho gaya")}}
  fun removeImage()=run{val row=_s.value.editing?:return@run;r.removeProductImage(row.shopProduct.shopId,row);_s.update{it.copy(screen="products",editing=null,currentImage=null)}}
- fun openLowStock(){_s.update{it.copy(screen="lowStock")}}
+  fun openLowStock(){val shop=_s.value.selectedShopId?:_s.value.shops.firstOrNull()?.id;_s.update{it.copy(screen="lowStock")};if(shop!=null)watchPurchase(shop)}
+  private fun watchPurchase(shop:String){purchaseJob?.cancel();purchaseJob=viewModelScope.launch{r.purchaseList(shop).collect{rows->_s.update{it.copy(purchaseItems=rows)}}}}
+  fun openPurchaseList(){val shop=_s.value.selectedShopId?:_s.value.shops.firstOrNull()?.id?:return;_s.update{it.copy(screen="purchaseList",selectedShopId=shop)};watchPurchase(shop);run{r.refreshPurchaseList(shop)}}
+  fun togglePurchase(item:PurchaseListEntity)=run{val shop=_s.value.selectedShopId?:error("No shop selected");r.setPurchaseItemPurchased(shop,item,!item.isPurchased)}
+  fun deletePurchase(item:PurchaseListEntity)=run{val shop=_s.value.selectedShopId?:error("No shop selected");r.removePurchaseItem(shop,item);_s.update{it.copy(toast="✓ Hataya gaya")}}
  fun addPurchase(row:ProductRow)=run{val shortage=(row.shopProduct.minimumStockMilli-row.shopProduct.stockQuantityMilli).coerceAtLeast(1000);r.addToPurchaseList(row.shopProduct.shopId,row,shortage);_s.update{it.copy(scanMessage="Added to purchase list",scanError=false)}}
  fun openInventory(row:ProductRow){_s.update{it.copy(screen="inventory",inventoryProduct=row,inventoryHistory=emptyList())};inventoryJob?.cancel();inventoryJob=viewModelScope.launch{r.inventory(row.shopProduct.shopId,row.shopProduct.id).collect{history->_s.update{it.copy(inventoryHistory=history)}}}}
  fun adjustInventory(quantity:String,type:String,note:String)=run{val row=_s.value.inventoryProduct?:return@run;val q=ProductRules.quantityToMilli(quantity)?:error("Invalid quantity");r.adjustStock(row.shopProduct.shopId,row,q,type,note);_s.update{it.copy(screen="products",inventoryProduct=null)}}
@@ -240,11 +246,15 @@ class MainViewModel(private val r:AppRepository):ViewModel(){
  fun show(s:String){pushCurrent();_s.update{it.copy(screen=s,error=null)}}
  fun showWithRole(s:String,role:String){pushCurrent();_s.update{it.copy(screen=s,error=null,pendingRole=role)}}
  fun back(){_s.update{it.copy(drawerOpen=false)};val cur=_s.value.screen;val target=backStack.removeLastOrNull()?:defaultBack(cur);val safe=if(target=="home"&&_s.value.profile?.shopkeeper==true&&_s.value.shops.size<=1)"dashboard" else target;if(safe==cur)return;_s.update{it.copy(screen=safe,error=null)}}
- private fun defaultBack(cur:String)=when(cur){"products"->shopHome();"quickSale"->"products";"lowStock"->"products";"inventory"->"products";"customers"->"products";"customerForm"->"customers";"customerDetail"->"customers";"productForm"->if(_s.value.returnTo=="quickSale")"quickSale" else "products";"dashboard"->if(_s.value.profile?.shopkeeper==true)"dashboard" else "home";"more"->"dashboard";"reports"->shopHome();"shopPage"->"market";"checkout"->"shopPage";"orderDetail"->"orders";"shopOrders"->shopHome();"sales"->"dashboard";else->shopHome()}
+   private fun defaultBack(cur:String)=when(cur){"products"->shopHome();"quickSale"->"products";"lowStock"->"products";"purchaseList"->"lowStock";"inventory"->"products";"customers"->"products";"customerForm"->"customers";"customerDetail"->"customers";"productForm"->if(_s.value.returnTo=="quickSale")"quickSale" else "products";"dashboard"->if(_s.value.profile?.shopkeeper==true)"dashboard" else "home";"more"->"dashboard";"reports"->shopHome();"shopPage"->"market";"checkout"->"shopPage";"orderDetail"->"orders";"shopOrders"->shopHome();"sales"->"dashboard";"shopEdit"->shopHome();"changePin"->shopHome();else->shopHome()}
  /** Ek-shop shopkeeper ka "ghar" dashboard hai — intermediate shop screen kabhi nahi. */
  private fun shopHome()=if(_s.value.profile?.shopkeeper==true&&_s.value.shops.size<=1)"dashboard" else "home"
- fun saveShopPublish()=run{val shop=_s.value.shops.firstOrNull{it.id==_s.value.selectedShopId}?:return@run;runCatching{r.publishShop(shop,!shop.isPublished)}.onSuccess{_s.update{x->x.copy(toast=if(!shop.isPublished)"Dukaan ab marketplace par hai" else "Dukaan marketplace se hat gayi")}}.onFailure{e->_s.update{x->x.copy(error=e.message)}}}
- fun logout()=run{r.logout();backStack.clear();_s.value=UiState("login");toast("Logged out")}
+  fun saveShopPublish()=run{val shop=_s.value.shops.firstOrNull{it.id==_s.value.selectedShopId}?:return@run;runCatching{r.publishShop(shop,!shop.isPublished)}.onSuccess{_s.update{x->x.copy(toast=if(!shop.isPublished)"Dukaan ab marketplace par hai" else "Dukaan marketplace se hat gayi")}}.onFailure{e->_s.update{x->x.copy(error=e.message)}}}
+  fun editShopSafe(){val shop=_s.value.selectedShopId?.let{id->_s.value.shops.firstOrNull{it.id==id}}?:_s.value.shops.firstOrNull()?:return;pushCurrent();_s.update{it.copy(screen="shopEdit",editingShop=shop,error=null)}}
+  fun saveShopEdit(name:String,owner:String,address:String,locality:String,city:String,pincode:String,phone:String,desc:String)=run{val shop=_s.value.editingShop?:error("No shop selected");require(name.isNotBlank()&&owner.isNotBlank()&&address.isNotBlank()&&locality.isNotBlank()&&city.isNotBlank()){"Naam, owner, pata, locality, sheher zaroori hai"};require(pincode.matches(Regex("[1-9]\\d{5}"))){"Sahi 6-digit pincode daalo"};r.saveShopProfile(shop,name,owner,address,locality,city,pincode,phone,desc);_s.update{it.copy(screen="dashboard",editingShop=null,toast="✓ Dukaan update ho gayi")}}
+  fun logout()=run{r.logout();backStack.clear();_s.value=UiState("login");toast("Logged out")}
+  fun openChangePin(){pushCurrent();_s.update{it.copy(screen="changePin",error=null)}}
+  fun changePin(current:String,next:String,confirm:String)=run{require(next==confirm){"Naya PIN aur confirm PIN mil nahi rahe"};require(next!=current){"Naya PIN purane se alag rakho"};require(next.matches(Regex("\\d{4}|\\d{6}"))){"PIN sirf 4 ya 6 ank ka ho"};r.changePin(current,next,confirm);_s.update{it.copy(toast="✓ PIN badal gaya")}}
  private fun pushCurrent(){val cur=_s.value.screen;if(cur=="boot")return;if(backStack.lastOrNull()!=cur)backStack.addLast(cur);if(backStack.size>12)backStack.removeFirst()}
 }
 class Factory(private val r:AppRepository):ViewModelProvider.Factory{override fun <T:ViewModel> create(c:Class<T>):T=MainViewModel(r) as T}
@@ -280,11 +290,14 @@ class MainActivity:ComponentActivity(){
       "login"->PremiumWelcome({p,n,role->vm.login(p,n,role)},{role->vm.showWithRole("register",role)})
       "register"->Register(s.pendingRole,{p,n,c,r->vm.register(p,n,c,r)},{vm.back()})
       "profile"->Profile(s.pendingRole){n,c,k,h->vm.profile(n,c,k,h)}
-      "shop"->ShopForm{vm.shop(it)}
+       "shop"->ShopForm{vm.shop(it)}
+       "shopEdit"->ShopEditForm(s.editingShop,{n,o,a,l,c,p,ph,d->vm.saveShopEdit(n,o,a,l,c,p,ph,d)})
+       "changePin"->ChangePinScreen{o,n,c->vm.changePin(o,n,c)}
       "dashboard"->ShopDashboard(s,{id->vm.products(id)},{vm.quickSaleForSelected()},{vm.customersForSelected()},{vm.openLowStock()},{vm.openOrders()},{vm.openShopOrdersSafe()},{vm.openMarket()},{id->vm.openReports()},{vm.openSalesHistory()})
       "reports"->ReportsScreen(s)
       "products"->ProductList(s,{vm.addProduct()},{vm.editProduct(it)},{vm.archive(it)},{vm.openInventory(it)},{vm.quickSaleForSelected()},{vm.openLowStock()},{vm.customersForSelected()})
-      "lowStock"->LowStockScreen(s,{vm.addPurchase(it)})
+       "lowStock"->LowStockScreen(s,{vm.addPurchase(it)},{vm.openPurchaseList()})
+       "purchaseList"->PurchaseListScreen(s,{vm.togglePurchase(it)},{vm.deletePurchase(it)},{vm.openLowStock()})
       "inventory"->InventoryScreen(s,{q,t,n->vm.adjustInventory(q,t,n)})
       "quickSale"->QuickSaleScreen(s,{vm.scan(it)},{id,q->vm.changeSaleQuantity(id,q)},{vm.attachScanned()},{vm.show("posCart")},{vm.customersForSelected()})
       "posCart"->PosCartScreen(s,{id,q->vm.changeSaleQuantity(id,q)},{t->vm.setDiscount(t)},{vm.show("posCheckout")})
@@ -303,7 +316,7 @@ class MainActivity:ComponentActivity(){
       "orderDetail"->OrderDetailScreen(s,{vm.cancelOrder(it)})
       "shopOrders"->ShopOrdersScreen(s,{id,st->vm.advanceOrder(id,st)})
       "productForm"->ProductForm(s.editing,s.currentImage,s.pendingBarcode,s.scannedGlobal?.name,s.scannedGlobal?.brand,{draft,image->vm.saveProduct(draft,image)},{vm.removeImage()},{vm.scanForForm(it)})
-      "more"->MoreTabScreen(s,{vm.openShopOrdersSafe()},{vm.openMarket()},{vm.openReports()},{vm.openSalesHistory()},{vm.openOrders()},{vm.show("shop")},{vm.openFinanceSafe()},{vm.logout()})
+       "more"->MoreTabScreen(s,{vm.openShopOrdersSafe()},{vm.openMarket()},{vm.openReports()},{vm.openSalesHistory()},{vm.openOrders()},{vm.show("shop")},{vm.editShopSafe()},{vm.openChangePin()},{vm.openFinanceSafe()},{vm.logout()})
       else->Home(s,{id->vm.products(id)},{id->vm.openDashboard(id)},{id->vm.openQuickSale(id)},{vm.openMarket()},{vm.openOrders()},{vm.openShopOrdersSafe()},{vm.show("shop")},{vm.logout()})
      }
     }}
@@ -311,11 +324,11 @@ class MainActivity:ComponentActivity(){
     }
    }
    // Drawer Scaffold ke sibling hai — poore viewport (top bar + bottom nav dono) ke UPAR overlay hota hai
-   DrawerOverlay(s,{vm.closeDrawer()},{id->vm.closeDrawer();vm.openDashboard(id)},{vm.closeDrawer();vm.openMarket()},{vm.closeDrawer();vm.openOrders()},{vm.closeDrawer();vm.openShopOrdersSafe()},{vm.closeDrawer();vm.openReports()},{vm.logout()})
+    DrawerOverlay(s,{vm.closeDrawer()},{id->vm.closeDrawer();vm.openDashboard(id)},{vm.closeDrawer();vm.openMarket()},{vm.closeDrawer();vm.openOrders()},{vm.closeDrawer();vm.openShopOrdersSafe()},{vm.closeDrawer();vm.openReports()},{vm.closeDrawer();vm.openChangePin()},{vm.logout()})
   }
  }}
 
-@Composable fun TopBar(s:UiState,openDrawer:()->Unit,back:()->Unit,togglePublish:()->Unit,homeTitle:String?=null){val screen=s.screen;val title=when(screen){"home"->homeTitle?:"LocalDukaan";"dashboard"->s.shops.firstOrNull{it.id==s.selectedShopId}?.name?:"Dukaan";"reports"->"📊 Reports";"finance"->"💰 Finance";"posCart"->stringResource(R.string.cart);"posCheckout"->stringResource(R.string.checkout);"quickAddCustomer"->stringResource(R.string.add_customer);"saleSuccess"->"";"receipt"->stringResource(R.string.receipt);"products"->stringResource(R.string.products);"quickSale"->stringResource(R.string.quick_sale);"lowStock"->stringResource(R.string.low_stock_title);"inventory"->stringResource(R.string.inventory_title);"customers"->stringResource(R.string.customers);"customerForm"->if(s.customer!=null)stringResource(R.string.edit_customer) else stringResource(R.string.add_customer);"customerDetail"->stringResource(R.string.statement);"market"->stringResource(R.string.nearby_shops);"shopPage"->s.marketShop?.name?:stringResource(R.string.cart);"checkout"->stringResource(R.string.place_order);"orders"->stringResource(R.string.my_orders);"orderDetail"->stringResource(R.string.order_label);"shopOrders"->stringResource(R.string.shop_orders);"sales"->"🧾 Sales History";"productForm"->if(s.editing!=null)stringResource(R.string.edit_product) else stringResource(R.string.add_product);"profile"->"👤 Profile";"shop"->"🏪 Naya dukaan";"more"->"🛠️ Shop Operations";else->""}
+@Composable fun TopBar(s:UiState,openDrawer:()->Unit,back:()->Unit,togglePublish:()->Unit,homeTitle:String?=null){val screen=s.screen;val title=when(screen){"home"->homeTitle?:"LocalDukaan";"dashboard"->s.shops.firstOrNull{it.id==s.selectedShopId}?.name?:"Dukaan";"reports"->"📊 Reports";"finance"->"💰 Finance";"posCart"->stringResource(R.string.cart);"posCheckout"->stringResource(R.string.checkout);"quickAddCustomer"->stringResource(R.string.add_customer);"saleSuccess"->"";"receipt"->stringResource(R.string.receipt);"products"->stringResource(R.string.products);"quickSale"->stringResource(R.string.quick_sale);"lowStock"->stringResource(R.string.low_stock_title);"purchaseList"->stringResource(R.string.purchase_list);"inventory"->stringResource(R.string.inventory_title);"customers"->stringResource(R.string.customers);"customerForm"->if(s.customer!=null)stringResource(R.string.edit_customer) else stringResource(R.string.add_customer);"customerDetail"->stringResource(R.string.statement);"market"->stringResource(R.string.nearby_shops);"shopPage"->s.marketShop?.name?:stringResource(R.string.cart);"checkout"->stringResource(R.string.place_order);"orders"->stringResource(R.string.my_orders);"orderDetail"->stringResource(R.string.order_label);"shopOrders"->stringResource(R.string.shop_orders);"sales"->"🧾 Sales History";"productForm"->if(s.editing!=null)stringResource(R.string.edit_product) else stringResource(R.string.add_product);"profile"->"👤 Profile";"shop"->"🏪 Naya dukaan";"shopEdit"->stringResource(R.string.edit_shop);"changePin"->stringResource(R.string.change_pin);"more"->"🛠️ Shop Operations";else->""}
  Row(Modifier.fillMaxWidth().statusBarsPadding().padding(start=4.dp,end=16.dp,top=6.dp,bottom=4.dp),verticalAlignment=Alignment.CenterVertically){
   Surface(shape=RoundedCornerShape(14.dp),color=Color.White,shadowElevation=3.dp){
   if(screen=="home"||screen=="dashboard"){IconButton(openDrawer){Text("☰",fontSize=24.sp)}} else {IconButton(back){Text("←",fontSize=22.sp)}}
@@ -336,7 +349,7 @@ enum class DukaanTab{DASHBOARD,CATALOGUE,QUICK_SALE,KHATA,MORE}
 @Composable private fun navColors(active:Boolean)=NavigationBarItemDefaults.colors(indicatorColor=DukaanColors.LightGreen,selectedIconColor=DukaanColors.BlinkitGreen,selectedTextColor=DukaanColors.BlinkitGreen,unselectedIconColor=DukaanColors.Slate400,unselectedTextColor=DukaanColors.Slate400)
 @Composable private fun NavIcon(icon:androidx.compose.ui.graphics.vector.ImageVector,desc:String,active:Boolean){
  Box(Modifier.size(34.dp).clip(RoundedCornerShape(11.dp)).background(if(active)DukaanColors.LightGreen else Color.Transparent),contentAlignment=Alignment.Center){Icon(icon,desc,tint=if(active)DukaanColors.BlinkitGreen else DukaanColors.Slate400,modifier=Modifier.size(21.dp))}}
-@Composable fun MoreTabScreen(s:UiState,shopOrders:()->Unit,market:()->Unit,reports:()->Unit,salesHistory:()->Unit,myOrders:()->Unit,shopSettings:()->Unit,finance:()->Unit,logout:()->Unit){
+@Composable fun MoreTabScreen(s:UiState,shopOrders:()->Unit,market:()->Unit,reports:()->Unit,salesHistory:()->Unit,myOrders:()->Unit,shopSettings:()->Unit,editShop:()->Unit,changePin:()->Unit,finance:()->Unit,logout:()->Unit){
  LazyColumn(Modifier.fillMaxSize(),verticalArrangement=Arrangement.spacedBy(10.dp),contentPadding=PaddingValues(top=6.dp,bottom=20.dp)){
   item{ScreenTitle("🛠️ Shop Operations","Orders, reports aur settings — sab yahan se")}
   item{MoreMenuItem(Icons.Default.ReceiptLong,"Orders & Sales Register","Complete, pending aur cancelled sales ka poora record",shopOrders)}
@@ -345,7 +358,9 @@ enum class DukaanTab{DASHBOARD,CATALOGUE,QUICK_SALE,KHATA,MORE}
   item{MoreMenuItem(Icons.Default.Payments,"💰 Finance","Aaj ka collection, cash/UPI/udhaar aur dues — sab automatic",finance)}
   item{MoreMenuItem(Icons.Default.History,"Sales History","Kaun sa samaan CASH ya UDHARI mein gaya",salesHistory)}
   item{MoreMenuItem(Icons.Default.ShoppingBag,"My Orders","Aapke diye gaye online orders",myOrders)}
-  item{MoreMenuItem(Icons.Default.Settings,"Naya Dukaan","Doosri dukaan banayein (30-din free trial)",shopSettings)}
+   item{MoreMenuItem(Icons.Default.Settings,"Naya Dukaan","Doosri dukaan banayein (30-din free trial)",shopSettings)}
+   item{MoreMenuItem(Icons.Default.Storefront,"Dukaan Settings","Naam, pata, phone aur marketplace description badlein",editShop)}
+   item{MoreMenuItem(Icons.Default.Lock,"PIN Badlo","Login PIN surakshit tareeke se change karein",changePin)}
   item{MoreMenuItem(Icons.Default.Logout,"Logout","Is device se session khatam karein",logout,danger=true)}
  }}
 @Composable fun MoreMenuItem(icon:androidx.compose.ui.graphics.vector.ImageVector,title:String,subtitle:String,onClick:()->Unit,danger:Boolean=false){
@@ -356,9 +371,20 @@ enum class DukaanTab{DASHBOARD,CATALOGUE,QUICK_SALE,KHATA,MORE}
    Text("›",fontSize=18.sp,color=DukaanColors.Slate400)
   }}}
 @Composable fun PublishChip(unpublished:Boolean,onToggle:()->Unit){Box(Modifier.clip(RoundedCornerShape(999.dp)).background(if(unpublished)Color(0xFFFEF3C7) else DukaanColors.LightBlue).clickable{onToggle()}.padding(horizontal=12.dp,vertical=6.dp)){Text(if(unpublished)"● Not live · tap to go live" else "● LIVE",fontSize=11.sp,fontWeight=FontWeight.Bold,color=if(unpublished)Color(0xFF92400E) else DukaanColors.Navy)}}
+/** Drawer header ka pure logic — JVM unit test me verify hota hai (Avni-case samet). */
+data class DrawerIdentity(val title:String,val subtitle:String?,val roleKey:String,val initial:String)
+fun drawerIdentity(profile:LocalProfile?,shops:List<LocalShop>,selectedShopId:String?):DrawerIdentity{
+ val displayName=profile?.name?.trim().takeIf{!it.isNullOrEmpty()}?:"LocalDukaan"
+ val isKeeper=profile?.shopkeeper==true
+ val selected=selectedShopId?.let{id->shops.firstOrNull{it.id==id}}?:shops.firstOrNull()
+ val title=if(isKeeper)selected?.name?.takeIf{it.isNotBlank()}?:displayName else displayName
+ // Subtitle kabhi title jaisa nahi — warna "Avni • Avni" jaisi duplicate line banti hai.
+ val subtitle=if(isKeeper)(selected?.ownerName?.takeIf{it.isNotBlank()&&it!=title}?:displayName.takeIf{it!=title}) else null
+ return DrawerIdentity(title,subtitle,if(isKeeper)"SHOPKEEPER" else "CUSTOMER",title.trim().firstOrNull()?.uppercase() ?: "L")
+}
 /** Full-viewport navigation drawer — Scaffold ke sibling overlay ke roop me render hota hai,
  *  isliye top bar + bottom nav dono ke UPAR aata hai. Width 84% screen, safe-area aware. */
-@Composable fun DrawerOverlay(s:UiState,close:()->Unit,dashboard:(String)->Unit,market:()->Unit,myOrders:()->Unit,shopOrders:()->Unit,reports:()->Unit,logout:()->Unit){
+@Composable fun DrawerOverlay(s:UiState,close:()->Unit,dashboard:(String)->Unit,market:()->Unit,myOrders:()->Unit,shopOrders:()->Unit,reports:()->Unit,changePin:()->Unit,logout:()->Unit){
  val configuration=androidx.compose.ui.platform.LocalConfiguration.current
  val drawerWidth=(configuration.screenWidthDp*0.84f).dp
  androidx.compose.animation.AnimatedVisibility(s.drawerOpen,enter=androidx.compose.animation.fadeIn(),exit=androidx.compose.animation.fadeOut()){Box(Modifier.fillMaxSize().background(Color(0x8A0F172A)).clickable{close()})}
@@ -366,12 +392,21 @@ enum class DukaanTab{DASHBOARD,CATALOGUE,QUICK_SALE,KHATA,MORE}
   Row(Modifier.fillMaxSize()){
    Card(Modifier.fillMaxHeight().width(drawerWidth),shape=RoundedCornerShape(0.dp),colors=CardDefaults.cardColors(containerColor=Color.White),elevation=CardDefaults.cardElevation(16.dp)){
     Column(Modifier.fillMaxSize().systemBarsPadding().imePadding()){
-     // Fixed header — scroll se nahi hilta
-     Column(Modifier.fillMaxWidth().background(Brush.verticalGradient(listOf(DukaanColors.GreenDark,DukaanColors.BlinkitGreen))).padding(start=20.dp,end=16.dp,top=18.dp,bottom=18.dp)){
-      Box(Modifier.size(44.dp).clip(RoundedCornerShape(12.dp)).background(Color(0x33FFFFFF)),contentAlignment=Alignment.Center){Text("🏪",fontSize=22.sp)}
-      Spacer(Modifier.height(8.dp));Text(s.profile?.name?:"LocalDukaan",color=Color.White,fontWeight=FontWeight.ExtraBold,fontSize=18.sp,maxLines=1,overflow=androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-      Text(if(s.profile?.shopkeeper==true)"Shopkeeper" else "Customer",color=Color(0xFFDBEAFE),fontSize=12.sp,fontWeight=FontWeight.Medium)
-     }
+      // Premium identity header — SHOPKEEPER ke liye dukaan ka naam hero, vyakti ka naam subtitle.
+      // Pehle hamesha vyakti ka naam bada dikhta tha (dukaan pehchani nahi jaati thi).
+      Row(Modifier.fillMaxWidth().background(Brush.verticalGradient(listOf(DukaanColors.GreenDark,DukaanColors.BlinkitGreen))).padding(start=16.dp,end=16.dp,top=20.dp,bottom=20.dp),verticalAlignment=Alignment.CenterVertically){
+       val id=drawerIdentity(s.profile,s.shops,s.selectedShopId)
+       Box(Modifier.size(52.dp).clip(CircleShape).background(Color.White),contentAlignment=Alignment.Center){Text(id.initial,fontSize=22.sp,fontWeight=FontWeight.ExtraBold,color=DukaanColors.GreenDark)}
+       Spacer(Modifier.width(12.dp))
+       Column(Modifier.weight(1f)){
+        Text(id.title,color=Color.White,fontWeight=FontWeight.ExtraBold,fontSize=17.sp,maxLines=1,overflow=androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+        Spacer(Modifier.height(5.dp))
+        Row(verticalAlignment=Alignment.CenterVertically){
+         Box(Modifier.clip(RoundedCornerShape(999.dp)).background(Color(0x40FFFFFF)).padding(horizontal=9.dp,vertical=3.dp)){Text((if(id.roleKey=="SHOPKEEPER")stringResource(R.string.shopkeeper) else stringResource(R.string.customer)).uppercase(),fontSize=10.sp,fontWeight=FontWeight.ExtraBold,color=Color.White,letterSpacing=0.8.sp)}
+         if(id.subtitle!=null){Text("  •  ${id.subtitle}",fontSize=12.sp,fontWeight=FontWeight.Medium,color=Color(0xFFDBEAFE),maxLines=1,overflow=androidx.compose.ui.text.style.TextOverflow.Ellipsis,modifier=Modifier.weight(1f,false))}
+        }
+       }
+      }
      // Scrollable menu — chhoti screens par bhi sab items accessible
      Column(Modifier.weight(1f,true).verticalScroll(rememberScrollState()).padding(vertical=6.dp)){
       if(s.profile?.shopkeeper==true){
@@ -380,10 +415,11 @@ enum class DukaanTab{DASHBOARD,CATALOGUE,QUICK_SALE,KHATA,MORE}
        DrawerLabel("ORDERS");DrawerItem(Icons.Default.ShoppingBag,"My Orders",myOrders)
        DrawerItem(Icons.Default.ReceiptLong,"Shop Orders",shopOrders)
        DrawerLabel("MARKET");DrawerItem(Icons.Default.Storefront,"Nearby Shops",market)
-      } else {
-       DrawerLabel("MARKET");DrawerItem(Icons.Default.Storefront,"Nearby Shops",market)
-       DrawerItem(Icons.Default.ShoppingBag,"My Orders",myOrders)
-      }
+       } else {
+        DrawerLabel("MARKET");DrawerItem(Icons.Default.Storefront,"Nearby Shops",market)
+        DrawerItem(Icons.Default.ShoppingBag,"My Orders",myOrders)
+        DrawerLabel("ACCOUNT");DrawerItem(Icons.Default.Lock,stringResource(R.string.change_pin),changePin)
+       }
      }
      // Logout footer — hamesha visible, divider ke saath
      Divider(color=DukaanColors.Slate200)
@@ -395,21 +431,26 @@ enum class DukaanTab{DASHBOARD,CATALOGUE,QUICK_SALE,KHATA,MORE}
   }}}
 @Composable fun DrawerLabel(text:String){Text(text,fontSize=11.sp,fontWeight=FontWeight.ExtraBold,color=DukaanColors.Slate500,letterSpacing=1.2.sp,modifier=Modifier.padding(start=20.dp,top=14.dp,bottom=4.dp))}
 @Composable fun DrawerItem(icon:androidx.compose.ui.graphics.vector.ImageVector,label:String,action:()->Unit,danger:Boolean=false){
- Row(Modifier.fillMaxWidth().heightIn(min=52.dp).clickable{action()}.padding(horizontal=20.dp),verticalAlignment=Alignment.CenterVertically){
-  Icon(icon,null,tint=if(danger)DukaanColors.Red else DukaanColors.BlinkitGreen,modifier=Modifier.size(24.dp));Spacer(Modifier.width(16.dp))
-  Text(label,fontSize=15.sp,fontWeight=FontWeight.SemiBold,color=if(danger)DukaanColors.Red else DukaanColors.Dark)
+ Row(Modifier.fillMaxWidth().padding(horizontal=12.dp).clip(RoundedCornerShape(12.dp)).clickable{action()}.padding(horizontal=8.dp,vertical=5.dp).heightIn(min=48.dp),verticalAlignment=Alignment.CenterVertically){
+  Box(Modifier.size(38.dp).clip(RoundedCornerShape(11.dp)).background(if(danger)DukaanColors.LightRed else DukaanColors.LightGreen),contentAlignment=Alignment.Center){Icon(icon,null,tint=if(danger)DukaanColors.Red else DukaanColors.BlinkitGreen,modifier=Modifier.size(20.dp))}
+  Spacer(Modifier.width(12.dp))
+  Text(label,fontSize=15.sp,fontWeight=FontWeight.SemiBold,color=if(danger)DukaanColors.Red else DukaanColors.Dark,modifier=Modifier.weight(1f))
  }}
 /** Compact shop summary: [icon] naam / sheher + LIVE badge. Logout yahan NAHI hota — drawer mein hai. */
 @Composable fun DashHeader(s:UiState){
  val shop=s.shops.firstOrNull{it.id==s.selectedShopId}
+ val trialDays=shop?.let{if(it.trialEndsAt>0)((it.trialEndsAt-System.currentTimeMillis()/1000)/86400).toInt() else null}
  Card(Modifier.fillMaxWidth(),shape=RoundedCornerShape(16.dp),colors=CardDefaults.cardColors(containerColor=Color.White),elevation=CardDefaults.cardElevation(1.dp)){
-  Row(Modifier.fillMaxWidth().padding(12.dp),verticalAlignment=Alignment.CenterVertically){
-   Box(Modifier.size(42.dp).clip(RoundedCornerShape(12.dp)).background(DukaanColors.LightYellow),contentAlignment=Alignment.Center){Text("🏪",fontSize=20.sp)}
-   Spacer(Modifier.width(10.dp))
-   Column(Modifier.weight(1f)){
-    Text(shop?.name?:"Dukaan",fontWeight=FontWeight.Bold,fontSize=15.sp,color=DukaanColors.Dark,maxLines=1,overflow=androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-    Text("${shop?.locality.orEmpty()}, ${shop?.city.orEmpty()}",fontSize=12.sp,color=DukaanColors.Slate600,maxLines=1,overflow=androidx.compose.ui.text.style.TextOverflow.Ellipsis)}
-   StatusBadge(if(shop?.isPublished==true)"LIVE" else "DRAFT")
+  Column(Modifier.fillMaxWidth().padding(12.dp)){
+   Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){
+    Box(Modifier.size(42.dp).clip(RoundedCornerShape(12.dp)).background(DukaanColors.LightYellow),contentAlignment=Alignment.Center){Text("🏪",fontSize=20.sp)}
+    Spacer(Modifier.width(10.dp))
+    Column(Modifier.weight(1f)){
+     Text(shop?.name?:"Dukaan",fontWeight=FontWeight.Bold,fontSize=15.sp,color=DukaanColors.Dark,maxLines=1,overflow=androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+     Text("${shop?.locality.orEmpty()}, ${shop?.city.orEmpty()}",fontSize=12.sp,color=DukaanColors.Slate600,maxLines=1,overflow=androidx.compose.ui.text.style.TextOverflow.Ellipsis)}
+    StatusBadge(if(shop?.isPublished==true)"LIVE" else "DRAFT")
+   }
+   if(trialDays!=null){Spacer(Modifier.height(8.dp));Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){Box(Modifier.clip(RoundedCornerShape(999.dp)).background(if(trialDays>0)Color(0xFFFEF3C7) else DukaanColors.LightRed).padding(horizontal=10.dp,vertical=4.dp)){Text(if(trialDays>0)"🎟 Trial: $trialDays din baaki" else "🎟 Trial khatm",fontSize=11.sp,fontWeight=FontWeight.Bold,color=if(trialDays>0)Color(0xFF92400E) else Color(0xFF991B1B))}}}
   }}}
 @Composable fun ShopDashboard(s:UiState,products:(String)->Unit,quickSale:()->Unit,customers:()->Unit,lowStock:()->Unit,myOrders:()->Unit,shopOrders:()->Unit,market:()->Unit,reports:(String)->Unit,salesHistory:()->Unit){
  val today=ReportMath.todayEpochDay();val todaySales=s.dailySales.firstOrNull{it.epochDay==today};val todayProfit=s.dailyProfit.firstOrNull{it.epochDay==today}
@@ -506,7 +547,7 @@ enum class DukaanTab{DASHBOARD,CATALOGUE,QUICK_SALE,KHATA,MORE}
 @Composable fun StatusBadge(status:String){val (bg,fg)=when(status){"SYNCED","ACCEPTED","ACTIVE","DELIVERED","PAID","LIVE"->DukaanColors.LightGreen to DukaanColors.GreenDark;"PENDING","PENDING_APPROVAL"->DukaanColors.LightAmber to Color(0xFF8A6D00);"REJECTED","REJECTED_PERMANENT","FAILED"->DukaanColors.LightRed to Color(0xFF991B1B);"LOW STOCK"->Color(0xFFFFEDD5) to Color(0xFF9A3412);else->DukaanColors.Slate200 to DukaanColors.Gray};Box(Modifier.background(bg,RoundedCornerShape(999.dp)).padding(horizontal=10.dp,vertical=3.dp)){Text(status,fontSize=11.sp,fontWeight=FontWeight.Bold,color=fg)}}
 
 @Composable fun PinField(label:String,value:String,on:(String)->Unit){var visible by remember{mutableStateOf(false)};OutlinedTextField(value,on,label={Text(label)},modifier=Modifier.fillMaxWidth(),shape=RoundedCornerShape(14.dp),colors=OutlinedTextFieldDefaults.colors(focusedContainerColor=Color.White,unfocusedContainerColor=Color.White,focusedTextColor=DukaanColors.Slate900,unfocusedTextColor=DukaanColors.Slate900,focusedBorderColor=DukaanColors.Navy,unfocusedBorderColor=DukaanColors.Slate400,cursorColor=DukaanColors.Navy,focusedLabelColor=DukaanColors.Navy,unfocusedLabelColor=DukaanColors.Slate600),keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.NumberPassword),singleLine=true,visualTransformation=if(visible) VisualTransformation.None else PasswordVisualTransformation(),trailingIcon={TextButton({visible=!visible}){Text(if(visible)"Hide" else "Show",color=DukaanColors.Navy)}})}
-@Composable fun Field(label:String,value:String,on:(String)->Unit,type:KeyboardType=KeyboardType.Text){OutlinedTextField(value,on,label={Text(label)},modifier=Modifier.fillMaxWidth(),shape=RoundedCornerShape(14.dp),colors=OutlinedTextFieldDefaults.colors(focusedContainerColor=Color.White,unfocusedContainerColor=Color.White,focusedTextColor=DukaanColors.Slate900,unfocusedTextColor=DukaanColors.Slate900,focusedBorderColor=DukaanColors.Navy,unfocusedBorderColor=DukaanColors.Slate400,cursorColor=DukaanColors.Navy,focusedLabelColor=DukaanColors.Navy,unfocusedLabelColor=DukaanColors.Slate600),keyboardOptions=KeyboardOptions(keyboardType=type),singleLine=true)}
+@Composable fun Field(label:String,value:String,on:(String)->Unit,type:KeyboardType=KeyboardType.Text,secret:Boolean=false){OutlinedTextField(value,on,label={Text(label)},modifier=Modifier.fillMaxWidth(),shape=RoundedCornerShape(14.dp),colors=OutlinedTextFieldDefaults.colors(focusedContainerColor=Color.White,unfocusedContainerColor=Color.White,focusedTextColor=DukaanColors.Slate900,unfocusedTextColor=DukaanColors.Slate900,focusedBorderColor=DukaanColors.Navy,unfocusedBorderColor=DukaanColors.Slate400,cursorColor=DukaanColors.Navy,focusedLabelColor=DukaanColors.Navy,unfocusedLabelColor=DukaanColors.Slate600),keyboardOptions=KeyboardOptions(keyboardType=type),visualTransformation=if(secret)PasswordVisualTransformation() else VisualTransformation.None,singleLine=true)}
 /** Premium auth: upar deep-indigo hero (brand + role tabs), neeche white sheet (fields). Ek hi card, zero confusion. */
 @Composable fun PremiumWelcome(onLogin:(String,String,String)->Unit,showRegister:(String)->Unit){
  var tab by remember{mutableStateOf("CUSTOMER")}
@@ -558,7 +599,22 @@ enum class DukaanTab{DASHBOARD,CATALOGUE,QUICK_SALE,KHATA,MORE}
 
 @Composable fun ShopForm(go:(List<String>)->Unit){val labels=listOf(stringResource(R.string.shop_name),stringResource(R.string.owner_name),stringResource(R.string.address),stringResource(R.string.locality),stringResource(R.string.city),stringResource(R.string.pincode),stringResource(R.string.category),stringResource(R.string.latitude),stringResource(R.string.longitude));val v=remember{labels.mapIndexed{i,_->mutableStateOf(when(i){6->"Kirana";7->"28.6139";8->"77.2090";else->""})}}
  val valid=v[0].value.isNotBlank()&&v[1].value.isNotBlank()&&v[2].value.isNotBlank()&&v[4].value.isNotBlank()&&v[5].value.matches(Regex("[1-9]\\d{5}"))&&v[6].value.isNotBlank()&&(v[7].value.toDoubleOrNull()!=null&&v[7].value.toDoubleOrNull()!! in -90.0..90.0)&&(v[8].value.toDoubleOrNull()!=null&&v[8].value.toDoubleOrNull()!! in -180.0..180.0)
- Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).imePadding().statusBarsPadding()){Spacer(Modifier.height(24.dp));ScreenTitle("🏪 "+stringResource(R.string.shop_name),stringResource(R.string.create_shop_trial));Spacer(Modifier.height(12.dp));SectionCard{labels.forEachIndexed{i,l->Field(l,v[i].value,{v[i].value=it},when(i){5->KeyboardType.Number;7,8->KeyboardType.Decimal;else->KeyboardType.Text})}};Spacer(Modifier.height(16.dp));GradientButton(stringResource(R.string.create_shop_trial),valid){go(v.map{it.value})}}}
+  Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).imePadding().statusBarsPadding()){Spacer(Modifier.height(24.dp));ScreenTitle("🏪 "+stringResource(R.string.shop_name),stringResource(R.string.create_shop_trial));Spacer(Modifier.height(12.dp));SectionCard{labels.forEachIndexed{i,l->Field(l,v[i].value,{v[i].value=it},when(i){5->KeyboardType.Number;7,8->KeyboardType.Decimal;else->KeyboardType.Text})}};Spacer(Modifier.height(16.dp));GradientButton(stringResource(R.string.create_shop_trial),valid){go(v.map{it.value})}}}
+
+/** Maujooda dukaan edit — naam, pata, phone, description. Version-conflict ho to server batata hai (pehle refresh karo). */
+@Composable fun ShopEditForm(shop:LocalShop?,save:(String,String,String,String,String,String,String,String)->Unit){val current=shop?:return
+ var name by remember(current){mutableStateOf(current.name)};var owner by remember(current){mutableStateOf(current.ownerName)};var address by remember(current){mutableStateOf(current.addressLine)};var locality by remember(current){mutableStateOf(current.locality)};var city by remember(current){mutableStateOf(current.city)};var pincode by remember(current){mutableStateOf(current.pincode)};var phone by remember(current){mutableStateOf(current.phone.orEmpty())};var desc by remember(current){mutableStateOf(current.description.orEmpty())}
+ val valid=name.isNotBlank()&&owner.isNotBlank()&&address.isNotBlank()&&locality.isNotBlank()&&city.isNotBlank()&&pincode.matches(Regex("[1-9]\\d{5}"))
+ Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).imePadding().statusBarsPadding()){Spacer(Modifier.height(24.dp));ScreenTitle("🏪 "+stringResource(R.string.edit_shop),current.name);Spacer(Modifier.height(12.dp))
+  SectionCard{Field(stringResource(R.string.shop_name),name,{name=it});Field(stringResource(R.string.owner_name),owner,{owner=it});Field(stringResource(R.string.address),address,{address=it});Field(stringResource(R.string.locality),locality,{locality=it});Field(stringResource(R.string.city),city,{city=it});Field(stringResource(R.string.pincode),pincode,{pincode=it},KeyboardType.Number);Field(stringResource(R.string.mobile_number),phone,{phone=it},KeyboardType.Phone);Field(stringResource(R.string.description_optional),desc,{desc=it})}
+  Spacer(Modifier.height(16.dp));GradientButton("✓ "+stringResource(R.string.save),valid){save(name,owner,address,locality,city,pincode,phone,desc)}}}
+
+/** PIN change — purana PIN verify, naya 4/6-digit PIN. Kamyabi par doosre devices ke sessions revoke (server). */
+@Composable fun ChangePinScreen(go:(String,String,String)->Unit){var current by remember{mutableStateOf("")};var next by remember{mutableStateOf("")};var confirm by remember{mutableStateOf("")}
+ val valid=current.length>=4&&next.length>=4&&confirm.length>=4
+ Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).imePadding().statusBarsPadding()){Spacer(Modifier.height(24.dp));ScreenTitle("🔑 "+stringResource(R.string.change_pin),stringResource(R.string.change_pin_hint));Spacer(Modifier.height(12.dp))
+  SectionCard{PinField(stringResource(R.string.current_pin),current,{current=it});PinField(stringResource(R.string.new_pin),next,{next=it});PinField(stringResource(R.string.confirm_pin),confirm,{confirm=it})}
+  Spacer(Modifier.height(16.dp));GradientButton("✓ "+stringResource(R.string.change_pin),valid){go(current,next,confirm)}}}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable fun Home(s:UiState,products:(String)->Unit,dashboard:(String)->Unit,quickSale:(String)->Unit,market:()->Unit,orders:()->Unit,shopOrders:()->Unit,createShop:()->Unit,logout:()->Unit){
@@ -585,9 +641,32 @@ enum class DukaanTab{DASHBOARD,CATALOGUE,QUICK_SALE,KHATA,MORE}
   if(shown.isEmpty())Column(Modifier.fillMaxWidth().padding(top=40.dp),horizontalAlignment=Alignment.CenterHorizontally){Text("📦",fontSize=44.sp);Text(stringResource(R.string.empty_products),color=Color(0xFF5B6B62),textAlign=androidx.compose.ui.text.style.TextAlign.Center)}
   confirmArchive?.let{row->AlertDialog(onDismissRequest={confirmArchive=null},title={Text(stringResource(R.string.archive))},text={Text(stringResource(R.string.archive_confirm)+" (${row.product.name})")},confirmButton={TextButton({archive(row);confirmArchive=null}){Text(stringResource(R.string.archive),color=BrandRed)}},dismissButton={TextButton({confirmArchive=null}){Text(stringResource(R.string.cancel))}})}
   LazyColumn(verticalArrangement=Arrangement.spacedBy(8.dp),contentPadding=PaddingValues(bottom=16.dp)){items(shown,key={it.shopProduct.id}){row->Card(Modifier.fillMaxWidth(),shape=RoundedCornerShape(16.dp),colors=CardDefaults.cardColors(containerColor=if(row.lowStock)Color(0xFFFFF7ED) else Color.White)){Column(Modifier.padding(12.dp)){Row(verticalAlignment=Alignment.CenterVertically){Text(row.product.name,style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.Bold,modifier=Modifier.weight(1f));if(row.lowStock)StatusBadge("LOW STOCK") else StatusBadge(row.shopProduct.syncState)};Text("${ProductRules.rupees(row.shopProduct.sellingPricePaise)} • ${ProductRules.quantity(row.shopProduct.stockQuantityMilli)} ${row.product.unit}",color=BrandGreenDark,fontWeight=FontWeight.SemiBold);if(!row.shopProduct.isAvailable)Text(stringResource(R.string.unavailable),color=BrandRed);if(row.shopProduct.syncState!="SYNCED")Text(stringResource(R.string.waiting_sync)+" — net aane par edit aur stock unlock ho jayega",color=Color(0xFF92400E),fontSize=12.sp);if(row.shopProduct.syncState=="SYNCED")Row{TextButton({inventory(row)}){Text(stringResource(R.string.stock))};TextButton({edit(row)}){Text(stringResource(R.string.edit))};TextButton({confirmArchive=row}){Text(stringResource(R.string.archive),color=BrandRed)}}}}}}}}
-@Composable fun LowStockScreen(s:UiState,add:(ProductRow)->Unit){val low=s.products.filter{it.lowStock}.sortedBy{it.shopProduct.stockQuantityMilli-it.shopProduct.minimumStockMilli}
+@Composable fun LowStockScreen(s:UiState,add:(ProductRow)->Unit,openPurchase:()->Unit){val low=s.products.filter{it.lowStock}.sortedBy{it.shopProduct.stockQuantityMilli-it.shopProduct.minimumStockMilli}
+ val pendingCount=s.purchaseItems.count{!it.isPurchased}
+ OutlinedButton(openPurchase,Modifier.fillMaxWidth().height(48.dp),shape=RoundedCornerShape(14.dp)){Text("📋 "+stringResource(R.string.purchase_list)+(if(pendingCount>0)" ($pendingCount)" else ""),fontWeight=FontWeight.Bold)}
+ Spacer(Modifier.height(8.dp))
  s.scanMessage?.let{Text(it,color=BrandGreenDark,fontWeight=FontWeight.SemiBold,fontSize=13.sp,modifier=Modifier.padding(bottom=6.dp))}
  if(low.isEmpty())Column(Modifier.fillMaxWidth().padding(top=60.dp),horizontalAlignment=Alignment.CenterHorizontally){Text("✅",fontSize=48.sp);Text(stringResource(R.string.no_low_stock),color=Color(0xFF5B6B62))};LazyColumn(verticalArrangement=Arrangement.spacedBy(8.dp),contentPadding=PaddingValues(bottom=16.dp)){items(low,key={it.shopProduct.id}){row->Card(Modifier.fillMaxWidth(),shape=RoundedCornerShape(16.dp),colors=CardDefaults.cardColors(containerColor=Color(0xFFFFF7ED))){Column(Modifier.padding(12.dp)){Text(row.product.name,fontWeight=FontWeight.Bold);Text("${stringResource(R.string.current)} ${ProductRules.quantity(row.shopProduct.stockQuantityMilli)} • ${stringResource(R.string.minimum)} ${ProductRules.quantity(row.shopProduct.minimumStockMilli)}",color=Color(0xFF92400E));Button({add(row)},colors=ButtonDefaults.buttonColors(containerColor=BrandAmber)){Text(stringResource(R.string.add_to_purchase_list))}}}}}}
+/** Purchase List — kharid-suchi: tick karke kharida mark karo, swipe nahi seedha 🗑 se hatayo. Offline tick PENDING rehta hai, net par sync. */
+@Composable fun PurchaseListScreen(s:UiState,toggle:(PurchaseListEntity)->Unit,remove:(PurchaseListEntity)->Unit,backToLowStock:()->Unit){
+ var confirmRemove by remember{mutableStateOf<PurchaseListEntity?>(null)}
+ val pending=s.purchaseItems.filter{!it.isPurchased};val done=s.purchaseItems.filter{it.isPurchased}
+ Column(Modifier.fillMaxSize()){
+  if(s.purchaseItems.isEmpty())Column(Modifier.fillMaxWidth().padding(top=60.dp),horizontalAlignment=Alignment.CenterHorizontally){Text("📋",fontSize=48.sp);Spacer(Modifier.height(8.dp));Text(stringResource(R.string.purchase_empty),color=Color(0xFF5B6B62),textAlign=androidx.compose.ui.text.style.TextAlign.Center);Spacer(Modifier.height(12.dp));OutlinedButton(backToLowStock,shape=RoundedCornerShape(14.dp)){Text("📉 "+stringResource(R.string.low_stock_title))}}
+  else LazyColumn(verticalArrangement=Arrangement.spacedBy(8.dp),contentPadding=PaddingValues(bottom=16.dp)){
+   if(pending.isNotEmpty()){item{Text("🛒 "+stringResource(R.string.to_buy)+" (${pending.size})",fontWeight=FontWeight.Bold,color=DukaanColors.Dark)};items(pending,key={it.id}){item->PurchaseRow(item,false,{toggle(item)},{confirmRemove=item})}}
+   if(done.isNotEmpty()){item{Spacer(Modifier.height(4.dp));Text("✅ "+stringResource(R.string.bought)+" (${done.size})",fontWeight=FontWeight.Bold,color=DukaanColors.Slate600)};items(done,key={it.id}){item->PurchaseRow(item,true,{toggle(item)},{confirmRemove=item})}}
+  }
+ }
+ confirmRemove?.let{item->AlertDialog(onDismissRequest={confirmRemove=null},title={Text(stringResource(R.string.remove_item))},text={Text(item.productName)},confirmButton={TextButton({remove(item);confirmRemove=null}){Text(stringResource(R.string.remove_label),color=BrandRed)}},dismissButton={TextButton({confirmRemove=null}){Text(stringResource(R.string.cancel))}})}
+}
+@Composable private fun PurchaseRow(item:PurchaseListEntity,purchased:Boolean,onToggle:()->Unit,onRemove:()->Unit){
+ Card(Modifier.fillMaxWidth(),shape=RoundedCornerShape(16.dp),colors=CardDefaults.cardColors(containerColor=if(purchased)DukaanColors.Slate100 else Color.White)){
+  Row(Modifier.fillMaxWidth().padding(12.dp),verticalAlignment=Alignment.CenterVertically){
+   Checkbox(checked=purchased,onCheckedChange={onToggle()})
+   Column(Modifier.weight(1f)){Text(item.productName,fontWeight=if(purchased)FontWeight.Normal else FontWeight.Bold,color=if(purchased)DukaanColors.Slate500 else DukaanColors.Dark,textDecoration=if(purchased)androidx.compose.ui.text.style.TextDecoration.LineThrough else null,maxLines=2,overflow=androidx.compose.ui.text.style.TextOverflow.Ellipsis);Text(ProductRules.quantity(item.quantityMilli)+(if(item.syncState!="SYNCED")" • ⟳" else ""),fontSize=12.sp,color=DukaanColors.Slate600)}
+   IconButton(onRemove){Text("🗑",fontSize=18.sp)}
+  }}}
 @Composable fun InventoryScreen(s:UiState,confirm:(String,String,String)->Unit){val row=s.inventoryProduct?:return;var quantity by remember{mutableStateOf("")};var type by remember{mutableStateOf("PURCHASE")};var note by remember{mutableStateOf("")}
  Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).imePadding()){Text("${row.product.name}",style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold);Text("${stringResource(R.string.current)}: ${ProductRules.quantity(row.shopProduct.stockQuantityMilli)} ${row.product.unit}",color=BrandGreenDark,fontWeight=FontWeight.SemiBold);Spacer(Modifier.height(10.dp));SectionCard{Field(stringResource(R.string.quantity),quantity,{quantity=it},KeyboardType.Decimal);val reasons=listOf("PURCHASE","SALE","DAMAGE","EXPIRED","LOSS","ADJUSTMENT","RETURN_OUT");FlowRow(horizontalArrangement=Arrangement.spacedBy(6.dp)){reasons.forEach{r->FilterChip(selected=type==r,onClick={type=r},label={Text(r,fontSize=12.sp)})}};Field(stringResource(R.string.notes_optional),note,{note=it})}
   Spacer(Modifier.height(12.dp));GradientButton(if(type=="PURCHASE")"⬆️ "+stringResource(R.string.stock_in) else "⬇️ "+stringResource(R.string.stock_out),(ProductRules.quantityToMilli(quantity)?:0)>0){confirm(quantity,type,note)};Spacer(Modifier.height(16.dp));Text(stringResource(R.string.history),style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.Bold);if(s.inventoryHistory.isEmpty())Text("—",color=Color(0xFF5B6B62));SectionCard{s.inventoryHistory.forEach{Text("${it.type}: ${if(it.quantityDeltaMilli>0)"+" else ""}${ProductRules.quantity(it.quantityDeltaMilli)} → ${ProductRules.quantity(it.stockAfterMilli)}")}}}}
@@ -651,7 +730,7 @@ private fun readImageLimited(input:java.io.InputStream):ByteArray{val out=java.i
  var selected by remember{mutableStateOf<SelectedImage?>(null)}
  var scannedCode by remember{mutableStateOf<String?>(null)}
  var imageError by remember{mutableStateOf<String?>(null)}
- val picker=androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.OpenDocument()){uri->if(uri!=null){runCatching{context.contentResolver.takePersistableUriPermission(uri,android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION);val mime=context.contentResolver.getType(uri)?:error("Unknown image type");require(mime in setOf("image/jpeg","image/png","image/webp")){"Choose a JPEG, PNG or WebP image"};val bytes=context.contentResolver.openInputStream(uri)!!.use{input->readImageLimited(input)};require(bytes.isNotEmpty()){"Image is empty"};SelectedImage(bytes,mime,uri.lastPathSegment?:"Selected image")}.onSuccess{selected=it;imageError=null}.onFailure{imageError=it.message}}}
+ val picker=androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.OpenDocument()){uri->if(uri!=null){runCatching{context.contentResolver.takePersistableUriPermission(uri,android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION);val mime=context.contentResolver.getType(uri)?:error("Unknown image type");require(mime in setOf("image/jpeg","image/png","image/webp")){"Choose a JPEG, PNG or WebP image"};val bytes=(context.contentResolver.openInputStream(uri)?:error("Image khul nahi payi — dobara try karein")).use{input->readImageLimited(input)};require(bytes.isNotEmpty()){"Image is empty"};SelectedImage(bytes,mime,uri.lastPathSegment?:"Selected image")}.onSuccess{selected=it;imageError=null}.onFailure{imageError=it.message}}}
  var name by remember(existing,initialName){mutableStateOf(if(!initialName.isNullOrBlank())initialName else existing?.product?.name.orEmpty())};var brand by remember(existing,initialBrand){mutableStateOf(if(!initialBrand.isNullOrBlank())initialBrand else existing?.product?.brand.orEmpty())};var barcode by remember(existing,initialBarcode,initialName){mutableStateOf(existing?.product?.barcode?:initialBarcode.orEmpty())};var unit by remember(existing){mutableStateOf(existing?.product?.unit?:"piece")};var price by remember(existing){mutableStateOf(existing?.let{java.math.BigDecimal(it.shopProduct.sellingPricePaise).movePointLeft(2).toPlainString()}.orEmpty())};var opening by remember(existing){mutableStateOf(existing?.let{ProductRules.quantity(it.shopProduct.stockQuantityMilli)}?:"0")};var minimum by remember(existing){mutableStateOf(existing?.let{ProductRules.quantity(it.shopProduct.minimumStockMilli)}?:"0")};var description by remember(existing){mutableStateOf(existing?.product?.description.orEmpty())};var cost by remember(existing){mutableStateOf(existing?.let{if(it.shopProduct.costPricePaise>0)java.math.BigDecimal(it.shopProduct.costPricePaise).movePointLeft(2).toPlainString() else ""}.orEmpty())};var available by remember(existing){mutableStateOf(existing?.shopProduct?.isAvailable?:true)}
  Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).imePadding()){Spacer(Modifier.height(8.dp));if(existing==null){`in`.localdukaan.feature.BarcodeScanner(true,{code->scannedCode=code;barcode=code;onScan(code)},Modifier.fillMaxWidth().padding(horizontal=16.dp).aspectRatio(16f/9f));scannedCode?.let{Text("✓ Scan: $it",fontWeight=FontWeight.SemiBold,color=BrandGreenDark,modifier=Modifier.padding(horizontal=16.dp))}};SectionCard{Field(stringResource(R.string.product_name),name,{name=it});Field(stringResource(R.string.brand_optional),brand,{brand=it});Field(stringResource(R.string.barcode_optional),barcode,{barcode=it},KeyboardType.Number);Field(stringResource(R.string.unit),unit,{unit=it});Field(stringResource(R.string.selling_price),price,{price=it},KeyboardType.Decimal);Field(stringResource(R.string.cost_price),cost,{cost=it},KeyboardType.Decimal);if(existing==null)Field(stringResource(R.string.opening_stock),opening,{opening=it},KeyboardType.Decimal) else Text("${stringResource(R.string.stock)}: ${ProductRules.quantity(existing.shopProduct.stockQuantityMilli)}");Field(stringResource(R.string.minimum_stock),minimum,{minimum=it},KeyboardType.Decimal);Field(stringResource(R.string.description_optional),description,{description=it})}
   val localCurrent=existing?.shopProduct?.imageKey?.takeIf{it.startsWith("local-file:")}?.removePrefix("local-file:")?.let{runCatching{java.io.File(it).readBytes()}.getOrNull()}
@@ -663,10 +742,15 @@ private fun readImageLimited(input:java.io.InputStream):ByteArray{val out=java.i
   val draft=ProductDraft(name,brand,barcode,cost,unit,price,if(existing==null)opening else ProductRules.quantity(existing.shopProduct.stockQuantityMilli),minimum,description,available);val validation=ProductRules.validate(draft);validation.message?.let{Text(it,color=BrandRed)}
   Spacer(Modifier.height(8.dp));GradientButton(stringResource(R.string.save_product),validation.valid){save(draft,selected)};Spacer(Modifier.height(10.dp))}}
 @OptIn(ExperimentalMaterial3Api::class)
-@Composable fun CustomersScreen(s:UiState,add:()->Unit,edit:(ShopCustomerEntity)->Unit,open:(ShopCustomerEntity)->Unit,archive:(ShopCustomerEntity)->Unit){var confirmArchive by remember{mutableStateOf<ShopCustomerEntity?>(null)};Button(add,Modifier.fillMaxWidth().height(48.dp),colors=ButtonDefaults.buttonColors(containerColor=BrandGreen),shape=RoundedCornerShape(14.dp)){Text("+ "+stringResource(R.string.add_customer),fontWeight=FontWeight.Bold)}
- if(s.customers.isEmpty())Column(Modifier.fillMaxWidth().padding(top=40.dp),horizontalAlignment=Alignment.CenterHorizontally){Text("👥",fontSize=44.sp);Text(stringResource(R.string.no_customers),color=Color(0xFF5B6B62))}
+@Composable fun CustomersScreen(s:UiState,add:()->Unit,edit:(ShopCustomerEntity)->Unit,open:(ShopCustomerEntity)->Unit,archive:(ShopCustomerEntity)->Unit){var confirmArchive by remember{mutableStateOf<ShopCustomerEntity?>(null)};var query by remember{mutableStateOf("")};var dueOnly by remember{mutableStateOf(false)}
+ val dueCount=s.customers.count{it.currentBalancePaise>0}
+ Button(add,Modifier.fillMaxWidth().height(48.dp),colors=ButtonDefaults.buttonColors(containerColor=BrandGreen),shape=RoundedCornerShape(14.dp)){Text("+ "+stringResource(R.string.add_customer),fontWeight=FontWeight.Bold)}
+ Spacer(Modifier.height(8.dp));Field(stringResource(R.string.search_customers),query,{query=it})
+ Spacer(Modifier.height(8.dp));Row(verticalAlignment=Alignment.CenterVertically){FilterChip(selected=dueOnly,onClick={dueOnly=!dueOnly},label={Text("💰 "+stringResource(R.string.due_only)+(if(dueCount>0)" ($dueCount)" else ""),fontSize=13.sp)});Spacer(Modifier.width(8.dp));Text(ProductRules.rupees(s.customers.sumOf{it.currentBalancePaise})+" "+stringResource(R.string.total_due),fontSize=12.sp,color=BrandRed,fontWeight=FontWeight.SemiBold)}
+ val shown=s.customers.filter{(!dueOnly||it.currentBalancePaise>0)&&(query.isBlank()||it.displayName.contains(query,true)||it.normalizedPhone.orEmpty().contains(query,true))}
+ if(shown.isEmpty())Column(Modifier.fillMaxWidth().padding(top=40.dp),horizontalAlignment=Alignment.CenterHorizontally){Text("👥",fontSize=44.sp);Text(stringResource(if(s.customers.isEmpty())R.string.no_customers else R.string.no_match),color=Color(0xFF5B6B62))}
  confirmArchive?.let{row->AlertDialog(onDismissRequest={confirmArchive=null},title={Text(stringResource(R.string.archive))},text={Text(stringResource(R.string.archive_confirm)+" (${row.displayName})")},confirmButton={TextButton({archive(row);confirmArchive=null}){Text(stringResource(R.string.archive),color=BrandRed)}},dismissButton={TextButton({confirmArchive=null}){Text(stringResource(R.string.cancel))}})}
- LazyColumn(verticalArrangement=Arrangement.spacedBy(8.dp),contentPadding=PaddingValues(bottom=16.dp)){items(s.customers,key={it.id}){row->Card(onClick={open(row)},modifier=Modifier.fillMaxWidth(),shape=RoundedCornerShape(16.dp)){Column(Modifier.padding(12.dp)){Row(verticalAlignment=Alignment.CenterVertically){Text(row.displayName,style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.Bold,modifier=Modifier.weight(1f));StatusBadge(row.syncState)};row.normalizedPhone?.let{Text(it,color=Color(0xFF5B6B62))};if(row.creditEnabled){val dueColor=if(row.currentBalancePaise>0)BrandRed else BrandGreenDark;Text("${stringResource(R.string.due)}: ${ProductRules.rupees(row.currentBalancePaise)}",color=dueColor,fontWeight=FontWeight.SemiBold);Text("${stringResource(R.string.credit_limit_short)} ${row.creditLimitPaise?.let{ProductRules.rupees(it)}?:"-" } • ${stringResource(R.string.available_short)}: ${row.availableCreditPaise?.let{ProductRules.rupees(it)}?:"-" }",color=Color(0xFF5B6B62))} else Text(stringResource(R.string.credit_disabled),color=Color(0xFF5B6B62));Row{TextButton({edit(row)}){Text(stringResource(R.string.edit))};TextButton({confirmArchive=row}){Text(stringResource(R.string.archive),color=BrandRed)}}}}}}}
+ LazyColumn(verticalArrangement=Arrangement.spacedBy(8.dp),contentPadding=PaddingValues(bottom=16.dp)){items(shown,key={it.id}){row->Card(onClick={open(row)},modifier=Modifier.fillMaxWidth(),shape=RoundedCornerShape(16.dp)){Column(Modifier.padding(12.dp)){Row(verticalAlignment=Alignment.CenterVertically){Text(row.displayName,style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.Bold,modifier=Modifier.weight(1f));StatusBadge(row.syncState)};row.normalizedPhone?.let{Text(it,color=Color(0xFF5B6B62))};if(row.creditEnabled){val dueColor=if(row.currentBalancePaise>0)BrandRed else BrandGreenDark;Text("${stringResource(R.string.due)}: ${ProductRules.rupees(row.currentBalancePaise)}",color=dueColor,fontWeight=FontWeight.SemiBold);Text("${stringResource(R.string.credit_limit_short)} ${row.creditLimitPaise?.let{ProductRules.rupees(it)}?:"-" } • ${stringResource(R.string.available_short)}: ${row.availableCreditPaise?.let{ProductRules.rupees(it)}?:"-" }",color=Color(0xFF5B6B62))} else Text(stringResource(R.string.credit_disabled),color=Color(0xFF5B6B62));Row{TextButton({edit(row)}){Text(stringResource(R.string.edit))};TextButton({confirmArchive=row}){Text(stringResource(R.string.archive),color=BrandRed)}}}}}}}
 @Composable fun CustomerForm(s:UiState,save:(String,String,Boolean,String,String)->Unit){val e=s.customer;var name by remember{mutableStateOf(e?.displayName.orEmpty())};var mobile by remember{mutableStateOf(e?.normalizedPhone.orEmpty())};var creditEnabled by remember{mutableStateOf(e?.creditEnabled?:false)};var limit by remember{mutableStateOf(e?.creditLimitPaise?.let{java.math.BigDecimal(it).movePointLeft(2).toPlainString()}.orEmpty())};var notes by remember{mutableStateOf(e?.notes.orEmpty())}
  Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).imePadding()){Spacer(Modifier.height(8.dp));SectionCard{Field(stringResource(R.string.name),name,{name=it});Field(stringResource(R.string.mobile_optional),mobile,{mobile=it},KeyboardType.Phone);Row(verticalAlignment=Alignment.CenterVertically){Checkbox(creditEnabled,{creditEnabled=it});Text(stringResource(R.string.credit_enabled))};if(creditEnabled)Field(stringResource(R.string.credit_limit),limit,{limit=it},KeyboardType.Decimal);Field(stringResource(R.string.notes_optional),notes,{notes=it})};Spacer(Modifier.height(14.dp));GradientButton(stringResource(R.string.save),name.isNotBlank()){save(name,mobile,creditEnabled,limit,notes)}}}
 @Composable fun CustomerDetail(s:UiState,onCredit:(String,String,String)->Unit){val row=s.customer?:return;val live=s.customers.firstOrNull{it.id==row.id}?:row;var amount by remember{mutableStateOf("")};var note by remember{mutableStateOf("")}
