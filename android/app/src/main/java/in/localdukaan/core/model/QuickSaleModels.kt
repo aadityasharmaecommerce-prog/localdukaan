@@ -30,6 +30,9 @@ data class QuickSaleState(
   val subtotalPaise:Long get()=lines.values.fold(0L){sum,line->Math.addExact(sum,line.lineTotalPaise)}
   /** Sirf wahi lines jinka cost set hai — warna munafa overestimate hota. */
   val estimatedProfitPaise:Long get()=lines.values.filter{it.costPricePaise>0}.fold(0L){sum,line->Math.addExact(sum,(line.unitPricePaise-line.costPricePaise)*line.quantityMilli/1000)}
+  /** Munafe wali lines ki kul lagat — hisaab dikhane ke liye (bikri − lagat = munafa). */
+  val profitableCostPaise:Long get()=lines.values.filter{it.costPricePaise>0}.fold(0L){sum,line->Math.addExact(sum,line.costPricePaise*line.quantityMilli/1000)}
+  val allLinesCosted:Boolean get()=lines.isNotEmpty()&&lines.values.all{it.costPricePaise>0}
  val totalPaise:Long get()=(subtotalPaise-discountPaise).coerceAtLeast(0)
  val estimatedCostPaise:Long get()=lines.values.fold(0L){sum,line->Math.addExact(sum,line.lineCostPaise)}
  val canSubmit:Boolean get()=lines.isNotEmpty()&&(paymentMode==SalePaymentMode.PAID||!shopCustomerId.isNullOrBlank())
@@ -43,7 +46,7 @@ data class QuickSaleState(
 }
 
 /** Success screen ka summary — sale complete hone ke turant baad. */
-data class SaleSuccess(val saleId:String,val totalPaise:Long,val subtotalPaise:Long,val discountPaise:Long,val methodLabel:String,val customerLabel:String,val paidPaise:Long,val duePaise:Long,val profitPaise:Long=0)
+data class SaleSuccess(val saleId:String,val totalPaise:Long,val subtotalPaise:Long,val discountPaise:Long,val methodLabel:String,val customerLabel:String,val paidPaise:Long,val duePaise:Long,val profitPaise:Long=0,val costPaise:Long=0,val allCosted:Boolean=true)
 
 /** Receipt screen ke liye poora sale snapshot (local PENDING + synced COMPLETED dono chalte hain). */
 data class ReceiptData(val id:String,val shopName:String,val shopLine:String?,val createdAt:Long,val items:List<QuickSaleLine>,val subtotalPaise:Long,val discountPaise:Long,val totalPaise:Long,val methodLabel:String,val customerLabel:String,val paidPaise:Long,val duePaise:Long,val pendingSync:Boolean)

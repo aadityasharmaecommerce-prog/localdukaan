@@ -17,5 +17,7 @@ class QuickSaleTest {
  @Test fun discountReducesTotalButNeverBelowZero(){val s=QuickSaleState().scan(row(price=5000));assertEquals(3000L,s.setDiscount(2000).totalPaise);assertEquals(0L,s.setDiscount(99999).totalPaise)}
  @Test fun costSnapshotDrivesProfitEstimate(){val s=QuickSaleState().scan(row(price=5000,cost=3000));assertEquals(2000L,s.lines.values.first().lineTotalPaise-s.lines.values.first().lineCostPaise)}
  @Test fun scanCarriesCostPrice(){val s=QuickSaleState().scan(row(cost=12345));assertEquals(12345L,s.lines.values.first().costPricePaise)}
+ @Test fun parleGTwoPiecesProfitBreakdown(){val s=QuickSaleState().scan(row(id="pg",price=1000,cost=500)).scan(row(id="pg",price=1000,cost=500));assertEquals(2000L,s.subtotalPaise);assertEquals(1000L,s.estimatedProfitPaise);assertEquals(1000L,s.profitableCostPaise);assertTrue(s.allLinesCosted);assertEquals(1000L,s.subtotalPaise-s.profitableCostPaise)}
+ @Test fun zeroCostLinesExcludedFromProfit(){val s=QuickSaleState().scan(row(id="a",price=1000,cost=0)).scan(row(id="b",price=1000,cost=500));assertEquals(500L,s.estimatedProfitPaise);assertFalse(s.allLinesCosted)}
  @Test fun identifyTrimsAndBlankMeansWalkIn(){val s=QuickSaleState().identify("  Rahul  "," 9876543210 ");assertEquals("Rahul",s.customerName);assertEquals("9876543210",s.customerPhone);assertFalse(s.walkIn);val w=QuickSaleState().identify("","");assertTrue(w.walkIn)}
 }
