@@ -59,7 +59,8 @@ class AppRepository(private val context:Context,private val db:LocalDatabase,pri
  suspend fun downloadProductImage(shopId:String,shopProductId:String)=api.download("/v1/shops/$shopId/products/$shopProductId/image")
  suspend fun downloadUrl(url:String):ByteArray=kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO){val c=(java.net.URL(url).openConnection() as java.net.HttpURLConnection).apply{connectTimeout=15000;readTimeout=20000;setRequestProperty("user-agent","LocalDukaan/1.0")}
   try{if(c.responseCode !in 200..299)throw java.io.IOException("Image download failed");c.inputStream.use{it.readBytes()}}finally{runCatching{c.disconnect()}}}
- fun observeProducts(shopId:String):Flow<List<ProductRow>> = db.dao().products(shopId)
+  fun observeProducts(shopId:String):Flow<List<ProductRow>> = db.dao().products(shopId)
+  suspend fun productsSnapshot(shopId:String):List<ProductRow> = db.dao().products(shopId).first()
  suspend fun refreshProducts(shopId:String){val items=api.call("/v1/shops/$shopId/products",authenticated=true).getJSONArray("items");db.withTransaction{for(i in 0 until items.length())mergeProduct(items.getJSONObject(i),"SYNCED")}}
  fun dashboard(shopId:String):Flow<Triple<List<DailySaleRow>,List<DailyProfitRow>,StockValueRow?>> = kotlinx.coroutines.flow.combine(db.dao().dailySales(shopId),db.dao().dailyProfit(shopId),db.dao().stockValue(shopId)){a,b,c->Triple(a,b,c)}
  suspend fun dues(shopId:String):Pair<Long,Int> = db.dao().totalDue(shopId) to db.dao().dueCount(shopId)
