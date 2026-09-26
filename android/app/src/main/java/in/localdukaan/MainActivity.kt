@@ -68,12 +68,8 @@ import `in`.localdukaan.core.model.BarcodeRules
 import `in`.localdukaan.core.model.ProductRules
 import `in`.localdukaan.core.model.QuickSaleState
 import `in`.localdukaan.core.model.QuickSaleLine
-import `in`.localdukaan.core.voice.VoiceFail
-import `in`.localdukaan.core.voice.VoiceListenResult
-import `in`.localdukaan.core.voice.VoiceListener
 import android.Manifest
 import android.content.pm.PackageManager
-import android.speech.SpeechRecognizer
 import androidx.core.content.ContextCompat
 import `in`.localdukaan.core.model.SalePaymentMode
 import `in`.localdukaan.core.model.PaymentMethod
@@ -457,7 +453,7 @@ fun drawerIdentity(profile:LocalProfile?,shops:List<LocalShop>,selectedShopId:St
     Column(Modifier.fillMaxSize().systemBarsPadding().imePadding()){
       // Premium identity header — SHOPKEEPER ke liye shop ka naam hero, vyakti ka naam subtitle.
       // Pehle hamesha vyakti ka naam bada dikhta tha (dukaan pehchani nahi jaati thi).
-      Row(Modifier.fillMaxWidth().background(Brush.verticalGradient(listOf(DukaanColors.GreenDark,DukaanColors.BlinkitGreen))).padding(start=16.dp,end=16.dp,top=20.dp,bottom=20.dp),verticalAlignment=Alignment.CenterVertically){
+      Row(Modifier.fillMaxWidth().background(DukaanColors.DrawerGradient).padding(start=16.dp,end=16.dp,top=20.dp,bottom=20.dp),verticalAlignment=Alignment.CenterVertically){
        val id=drawerIdentity(s.profile,s.shops,s.selectedShopId)
        Box(Modifier.size(52.dp).clip(CircleShape).background(Color.White),contentAlignment=Alignment.Center){Text(id.initial,fontSize=22.sp,fontWeight=FontWeight.ExtraBold,color=DukaanColors.GreenDark)}
        Spacer(Modifier.width(12.dp))
