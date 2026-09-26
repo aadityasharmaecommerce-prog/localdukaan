@@ -11,8 +11,11 @@ import androidx.compose.ui.graphics.Color
  * Deep indigo brand + gold accent — rich, trustworthy, premium feel.
  */
 object DukaanColors {
-    // Blinkit-style commerce palette: yellow brand + deep green accents + clean neutrals
-    val BlinkitYellow = Color(0xFFF8CB46)   // brand primary (header, hero)
+    // Flipkart-style commerce palette: YELLOW brand hero + deep-green actions + clean neutrals.
+    // Peela rang header, buttons aur highlights me; kaala text peele par; hara sirf success/stock.
+    val FlipkartYellow = Color(0xFFFFD814)     // brand primary (top bar, buttons, highlights)
+    val FlipkartYellowDark = Color(0xFFF5C236) // gradient end / pressed
+    val BlinkitYellow = Color(0xFFF8CB46)   // legacy brand alias (ab FlipkartYellow jaisa)
     val BlinkitGreen = Color(0xFF0C831F)    // CTA / success
     val Green = BlinkitGreen                // legacy alias
     val GreenDark = Color(0xFF0A6B19)       // pressed CTA / gradient end
@@ -41,10 +44,11 @@ object DukaanColors {
     val Slate100 = Color(0xFFF1F3F6)
     val Slate50 = Color(0xFFFAFAFA)
 
-    // Gradients — blinkit hero: poora yellow flat, buttons green
-    val HeroGradient = Brush.verticalGradient(listOf(Color(0xFFF8CB46), Color(0xFFF5C236)))
-    val ButtonGradient = Brush.verticalGradient(listOf(BlinkitGreen, GreenDark))
-    val DrawerGradient = Brush.verticalGradient(listOf(Color(0xFF0A6B19), BlinkitGreen))
+    // Gradients — hero + saare bade buttons peele (Flipkart style), text hamesha kaala
+    val HeroGradient = Brush.verticalGradient(listOf(Color(0xFFFFD814), Color(0xFFF5C236)))
+    val ButtonGradient = Brush.verticalGradient(listOf(Color(0xFFFFD814), Color(0xFFF5C236)))
+    val OnYellow = Color(0xFF1A1A1A)
+    val DrawerGradient = Brush.verticalGradient(listOf(Color(0xFFFFD814), Color(0xFFF5C236)))
 }
 
 private val LightColorScheme = lightColorScheme(

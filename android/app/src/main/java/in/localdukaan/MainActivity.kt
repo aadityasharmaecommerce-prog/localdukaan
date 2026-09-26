@@ -377,7 +377,7 @@ class MainActivity:ComponentActivity(){
       "orderDetail"->OrderDetailScreen(s,{vm.cancelOrder(it)})
       "shopOrders"->ShopOrdersScreen(s,{id,st->vm.advanceOrder(id,st)})
       "productForm"->ProductForm(s.editing,s.currentImage,s.pendingBarcode,s.scannedGlobal?.name,s.scannedGlobal?.brand,{draft,image->vm.saveProduct(draft,image)},{vm.removeImage()},{vm.scanForForm(it)},s.products)
-       "more"->MoreTabScreen(s,{vm.openShopOrdersSafe()},{vm.openMarket()},{vm.openReports()},{vm.openSalesHistory()},{vm.openOrders()},{vm.show("shop")},{vm.editShopSafe()},{vm.openChangePin()},{vm.openFinanceSafe()},{vm.logout()})
+       "more"->MoreTabScreen(s,{vm.openShopOrdersSafe()},{vm.openMarket()},{vm.openReports()},{vm.openSalesHistory()},{vm.openOrders()},{vm.editShopSafe()},{vm.openChangePin()},{vm.openFinanceSafe()},{vm.logout()})
       else->Home(s,{id->vm.products(id)},{id->vm.openDashboard(id)},{id->vm.openQuickSale(id)},{vm.openMarket()},{vm.openOrders()},{vm.openShopOrdersSafe()},{vm.show("shop")},{vm.logout()})
      }
     }}
@@ -393,7 +393,7 @@ class MainActivity:ComponentActivity(){
 
 @Composable fun TopBar(s:UiState,openDrawer:()->Unit,back:()->Unit,togglePublish:()->Unit,homeTitle:String?=null){val screen=s.screen;val title=when(screen){"home"->homeTitle?:"LocalDukaan";"dashboard"->s.shops.firstOrNull{it.id==s.selectedShopId}?.name?:"Shop";"reports"->"📊 Reports";"finance"->"💰 Finance";"posCart"->stringResource(R.string.cart);"posCheckout"->stringResource(R.string.checkout);"quickAddCustomer"->stringResource(R.string.add_customer);"saleSuccess"->"";"receipt"->stringResource(R.string.receipt);"products"->stringResource(R.string.products);"quickSale"->stringResource(R.string.quick_sale);"lowStock"->stringResource(R.string.low_stock_title);"purchaseList"->stringResource(R.string.purchase_list);"inventory"->stringResource(R.string.inventory_title);"customers"->stringResource(R.string.customers);"customerForm"->if(s.customer!=null)stringResource(R.string.edit_customer) else stringResource(R.string.add_customer);"customerDetail"->stringResource(R.string.statement);"market"->stringResource(R.string.nearby_shops);"shopPage"->s.marketShop?.name?:stringResource(R.string.cart);"checkout"->stringResource(R.string.place_order);"orders"->stringResource(R.string.my_orders);"orderDetail"->stringResource(R.string.order_label);"shopOrders"->stringResource(R.string.shop_orders);"sales"->"🧾 Sales History";"productForm"->if(s.editing!=null)stringResource(R.string.edit_product) else stringResource(R.string.add_product);"profile"->"👤 Profile";"shop"->"🏪 New Shop";"shopEdit"->stringResource(R.string.edit_shop);"changePin"->stringResource(R.string.change_pin);"more"->"🛠️ Shop Operations";else->""}
   Row(Modifier.fillMaxWidth().statusBarsPadding().padding(start=4.dp,end=16.dp,top=6.dp,bottom=4.dp),verticalAlignment=Alignment.CenterVertically){
-   Surface(shape=RoundedCornerShape(14.dp),color=Color.White,shadowElevation=3.dp){
+   Surface(shape=RoundedCornerShape(14.dp),color=DukaanColors.FlipkartYellow,shadowElevation=3.dp){
    Row(Modifier.padding(end=14.dp),verticalAlignment=Alignment.CenterVertically){
    if(screen=="home"||screen=="dashboard"){IconButton(openDrawer){Text("☰",fontSize=24.sp)}} else {IconButton(back){Text("←",fontSize=22.sp)}}
    Spacer(Modifier.width(2.dp))
@@ -411,18 +411,17 @@ enum class DukaanTab{DASHBOARD,CATALOGUE,QUICK_SALE,KHATA,MORE}
   NavigationBarItem(selected=false,onClick={onSelect(DukaanTab.KHATA)},icon={NavIcon(Icons.Default.AccountBalanceWallet,"Credit",false)},label={Text("Credit",fontSize=11.sp,maxLines=1)},colors=navColors(false))
   NavigationBarItem(selected=moreSelected,onClick={onSelect(DukaanTab.MORE)},icon={NavIcon(Icons.Default.Storefront,"Shop",moreSelected)},label={Text("Shop",fontSize=11.sp,fontWeight=bold(moreSelected),maxLines=1)},colors=navColors(moreSelected))
  }}}
-@Composable private fun navColors(active:Boolean)=NavigationBarItemDefaults.colors(indicatorColor=DukaanColors.LightGreen,selectedIconColor=DukaanColors.BlinkitGreen,selectedTextColor=DukaanColors.BlinkitGreen,unselectedIconColor=DukaanColors.Slate400,unselectedTextColor=DukaanColors.Slate400)
+@Composable private fun navColors(active:Boolean)=NavigationBarItemDefaults.colors(indicatorColor=DukaanColors.FlipkartYellow,selectedIconColor=DukaanColors.OnYellow,selectedTextColor=DukaanColors.OnYellow,unselectedIconColor=DukaanColors.Slate400,unselectedTextColor=DukaanColors.Slate400)
 @Composable private fun NavIcon(icon:androidx.compose.ui.graphics.vector.ImageVector,desc:String,active:Boolean){
  Box(Modifier.size(34.dp).clip(RoundedCornerShape(11.dp)).background(if(active)DukaanColors.LightGreen else Color.Transparent),contentAlignment=Alignment.Center){Icon(icon,desc,tint=if(active)DukaanColors.BlinkitGreen else DukaanColors.Slate400,modifier=Modifier.size(21.dp))}}
-@Composable fun MoreTabScreen(s:UiState,shopOrders:()->Unit,market:()->Unit,reports:()->Unit,salesHistory:()->Unit,myOrders:()->Unit,shopSettings:()->Unit,editShop:()->Unit,changePin:()->Unit,finance:()->Unit,logout:()->Unit){
+@Composable fun MoreTabScreen(s:UiState,shopOrders:()->Unit,market:()->Unit,reports:()->Unit,salesHistory:()->Unit,myOrders:()->Unit,editShop:()->Unit,changePin:()->Unit,finance:()->Unit,logout:()->Unit){
   LazyColumn(Modifier.fillMaxSize(),verticalArrangement=Arrangement.spacedBy(10.dp),contentPadding=PaddingValues(top=6.dp,bottom=20.dp)){
    item{MoreMenuItem(Icons.Default.ReceiptLong,"Orders & Sales Register","Full record of completed, pending and cancelled sales",shopOrders)}
   item{MoreMenuItem(Icons.Default.Storefront,"Customer Marketplace","Browse nearby shops, publish your shop",market)}
   item{MoreMenuItem(Icons.Default.Analytics,"Business Reports","Revenue trends, profit and payment breakdown",reports)}
   item{MoreMenuItem(Icons.Default.Payments,"💰 Finance","Collection today: cash, UPI, credit and dues — all automatic",finance)}
   item{MoreMenuItem(Icons.Default.History,"Sales History","Which items were CASH or CREDIT",salesHistory)}
-  item{MoreMenuItem(Icons.Default.ShoppingBag,"My Orders","Your online orders",myOrders)}
-   item{MoreMenuItem(Icons.Default.Settings,"New Shop","Create another shop (30-day free trial)",shopSettings)}
+   item{MoreMenuItem(Icons.Default.ShoppingBag,"My Orders","Your online orders",myOrders)}
    item{MoreMenuItem(Icons.Default.Storefront,"Shop Settings","Edit name, address, phone and marketplace description",editShop)}
    item{MoreMenuItem(Icons.Default.Lock,"PIN Badlo","Change your login PIN securely",changePin)}
   item{MoreMenuItem(Icons.Default.Logout,"Logout","Sign out of this device",logout,danger=true)}
@@ -463,11 +462,11 @@ fun drawerIdentity(profile:LocalProfile?,shops:List<LocalShop>,selectedShopId:St
        Box(Modifier.size(52.dp).clip(CircleShape).background(Color.White),contentAlignment=Alignment.Center){Text(id.initial,fontSize=22.sp,fontWeight=FontWeight.ExtraBold,color=DukaanColors.GreenDark)}
        Spacer(Modifier.width(12.dp))
        Column(Modifier.weight(1f)){
-        Text(id.title,color=Color.White,fontWeight=FontWeight.ExtraBold,fontSize=17.sp,maxLines=1,overflow=androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+        Text(id.title,color=DukaanColors.OnYellow,fontWeight=FontWeight.ExtraBold,fontSize=17.sp,maxLines=1,overflow=androidx.compose.ui.text.style.TextOverflow.Ellipsis)
         Spacer(Modifier.height(5.dp))
         Row(verticalAlignment=Alignment.CenterVertically){
-         Box(Modifier.clip(RoundedCornerShape(999.dp)).background(Color(0x40FFFFFF)).padding(horizontal=9.dp,vertical=3.dp)){Text((if(id.roleKey=="SHOPKEEPER")stringResource(R.string.shopkeeper) else stringResource(R.string.customer)).uppercase(),fontSize=10.sp,fontWeight=FontWeight.ExtraBold,color=Color.White,letterSpacing=0.8.sp)}
-         if(id.subtitle!=null){Text("  •  ${id.subtitle}",fontSize=12.sp,fontWeight=FontWeight.Medium,color=Color(0xFFDBEAFE),maxLines=1,overflow=androidx.compose.ui.text.style.TextOverflow.Ellipsis,modifier=Modifier.weight(1f,false))}
+         Box(Modifier.clip(RoundedCornerShape(999.dp)).background(Color(0x55000000)).padding(horizontal=9.dp,vertical=3.dp)){Text((if(id.roleKey=="SHOPKEEPER")stringResource(R.string.shopkeeper) else stringResource(R.string.customer)).uppercase(),fontSize=10.sp,fontWeight=FontWeight.ExtraBold,color=DukaanColors.FlipkartYellow,letterSpacing=0.8.sp)}
+         if(id.subtitle!=null){Text("  •  ${id.subtitle}",fontSize=12.sp,fontWeight=FontWeight.Medium,color=DukaanColors.Slate700,maxLines=1,overflow=androidx.compose.ui.text.style.TextOverflow.Ellipsis,modifier=Modifier.weight(1f,false))}
         }
        }
       }
@@ -551,7 +550,7 @@ fun drawerIdentity(profile:LocalProfile?,shops:List<LocalShop>,selectedShopId:St
   s.scanMessage?.let{Text(it,Modifier.padding(horizontal=16.dp),color=if(s.scanError==true)Color(0xFFB91C1C) else BrandGreenDark,fontWeight=FontWeight.SemiBold,fontSize=13.sp)}
   if(s.scannedGlobal!=null||(s.scanError==true&&s.pendingBarcode!=null))Row(Modifier.fillMaxWidth().padding(horizontal=16.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(10.dp)){s.currentImage?.let{bytes->android.graphics.BitmapFactory.decodeByteArray(bytes,0,bytes.size)?.let{bmp->androidx.compose.foundation.Image(bmp.asImageBitmap(),null,modifier=Modifier.size(48.dp).clip(RoundedCornerShape(10.dp)),contentScale=androidx.compose.ui.layout.ContentScale.Crop)}};Column(Modifier.weight(1f)){Text(s.scannedGlobal?.name?:"New product",fontWeight=FontWeight.Bold,fontSize=13.sp,maxLines=1,overflow=androidx.compose.ui.text.style.TextOverflow.Ellipsis)};Button(createProduct,colors=ButtonDefaults.buttonColors(containerColor=BrandGreen)){Text(stringResource(if(s.scannedGlobal!=null)R.string.add_to_my_shop else R.string.create_product),fontSize=12.sp)}}
   if(shown.isEmpty())Column(Modifier.fillMaxWidth().padding(top=40.dp),horizontalAlignment=Alignment.CenterHorizontally){Text("📦",fontSize=44.sp);Text(stringResource(R.string.empty_products),color=Color(0xFF5B6B62),textAlign=androidx.compose.ui.text.style.TextAlign.Center)}
-  androidx.compose.foundation.lazy.grid.LazyVerticalGrid(columns=androidx.compose.foundation.lazy.grid.GridCells.Fixed(2),modifier=Modifier.weight(1f).padding(horizontal=16.dp),horizontalArrangement=Arrangement.spacedBy(10.dp),verticalArrangement=Arrangement.spacedBy(10.dp),contentPadding=PaddingValues(vertical=10.dp)){
+   androidx.compose.foundation.lazy.grid.LazyVerticalGrid(columns=androidx.compose.foundation.lazy.grid.GridCells.Adaptive(150.dp),modifier=Modifier.weight(1f).padding(horizontal=16.dp),horizontalArrangement=Arrangement.spacedBy(10.dp),verticalArrangement=Arrangement.spacedBy(10.dp),contentPadding=PaddingValues(vertical=10.dp)){
     items(shown.size){i->val row=shown[i];Card(onClick={addLine(row)},shape=RoundedCornerShape(18.dp),colors=CardDefaults.cardColors(containerColor=Color.White),elevation=CardDefaults.cardElevation(1.dp)){Column(Modifier.fillMaxWidth().padding(12.dp)){
      Box(Modifier.fillMaxWidth().height(64.dp).clip(RoundedCornerShape(12.dp)).background(DukaanColors.LightGreen),contentAlignment=Alignment.Center){ProductThumb(row)}
      Spacer(Modifier.height(8.dp));Text(row.product.name,fontWeight=FontWeight.Bold,fontSize=14.sp,color=DukaanColors.Dark,maxLines=1,overflow=androidx.compose.ui.text.style.TextOverflow.Ellipsis)
@@ -654,7 +653,7 @@ fun drawerIdentity(profile:LocalProfile?,shops:List<LocalShop>,selectedShopId:St
  Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).imePadding()){Spacer(Modifier.height(10.dp));ScreenTitle("＋ "+stringResource(R.string.add_customer),stringResource(R.string.only_name_mobile));Spacer(Modifier.height(12.dp));SectionCard{Field(stringResource(R.string.name),n,{n=it});Field(stringResource(R.string.mobile_number),m,{m=it},KeyboardType.Phone)};Spacer(Modifier.height(14.dp));GradientButton(stringResource(R.string.save_customer),n.isNotBlank()){save(n,m)}}}
 @Composable fun ErrorBanner(msg:String,onDismiss:()->Unit){Card(Modifier.fillMaxWidth().padding(vertical=4.dp),colors=CardDefaults.cardColors(containerColor=DukaanColors.LightRed),shape=RoundedCornerShape(12.dp)){Row(Modifier.padding(start=12.dp),verticalAlignment=Alignment.CenterVertically){Text("⚠️ ",fontSize=18.sp);Text(msg,Modifier.weight(1f).padding(vertical=12.dp),color=Color(0xFF991B1B),style=MaterialTheme.typography.bodyMedium);TextButton(onDismiss){Text("✕",color=Color(0xFF991B1B))}}}}
 
-@Composable fun GradientButton(label:String,enabled:Boolean=true,action:()->Unit){Button(action,Modifier.fillMaxWidth().height(54.dp),enabled=enabled,colors=ButtonDefaults.buttonColors(containerColor=Color.Transparent,disabledContainerColor=Color.Transparent),shape=RoundedCornerShape(16.dp),elevation=ButtonDefaults.buttonElevation(if(enabled)6.dp else 0.dp),contentPadding=PaddingValues()){Box(Modifier.fillMaxSize().background(if(enabled)DukaanColors.ButtonGradient else Brush.verticalGradient(listOf(DukaanColors.Slate200,DukaanColors.Slate200)),RoundedCornerShape(16.dp)),contentAlignment=Alignment.Center){Text(label,color=Color.White,fontSize=17.sp,fontWeight=FontWeight.Bold)}}}
+@Composable fun GradientButton(label:String,enabled:Boolean=true,action:()->Unit){Button(action,Modifier.fillMaxWidth().height(54.dp),enabled=enabled,colors=ButtonDefaults.buttonColors(containerColor=Color.Transparent,disabledContainerColor=Color.Transparent),shape=RoundedCornerShape(16.dp),elevation=ButtonDefaults.buttonElevation(if(enabled)6.dp else 0.dp),contentPadding=PaddingValues()){Box(Modifier.fillMaxSize().background(if(enabled)DukaanColors.ButtonGradient else Brush.verticalGradient(listOf(DukaanColors.Slate200,DukaanColors.Slate200)),RoundedCornerShape(16.dp)),contentAlignment=Alignment.Center){Text(label,color=DukaanColors.OnYellow,fontSize=17.sp,fontWeight=FontWeight.Bold)}}}
 @Composable fun ActionButton(label:String,action:()->Unit){OutlinedButton(action,Modifier.fillMaxWidth().height(50.dp),shape=RoundedCornerShape(14.dp),colors=ButtonDefaults.outlinedButtonColors(contentColor=BrandGreenDark)){Text(label,fontWeight=FontWeight.SemiBold)}}
 @Composable fun SectionCard(content:@Composable ColumnScope.()->Unit){Card(Modifier.fillMaxWidth(),colors=CardDefaults.cardColors(containerColor=DukaanColors.Slate100),shape=RoundedCornerShape(16.dp),elevation=CardDefaults.cardElevation(1.dp)){Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(10.dp),content=content)}}
 @Composable fun ScreenTitle(text:String,sub:String?=null){Column{Text(text,style=MaterialTheme.typography.headlineMedium,fontWeight=FontWeight.ExtraBold,color=DukaanColors.Navy);if(sub!=null)Text(sub,style=MaterialTheme.typography.bodyMedium,color=DukaanColors.Slate500)}}
@@ -668,7 +667,7 @@ fun drawerIdentity(profile:LocalProfile?,shops:List<LocalShop>,selectedShopId:St
  var tab by remember{mutableStateOf("CUSTOMER")}
  Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).navigationBarsPadding()){
   Column(Modifier.fillMaxWidth().background(DukaanColors.HeroGradient).statusBarsPadding().padding(horizontal=20.dp,vertical=32.dp),horizontalAlignment=Alignment.CenterHorizontally){
-   Text("🛍️",fontSize=40.sp);Spacer(Modifier.height(6.dp));Text(stringResource(R.string.app_name),style=MaterialTheme.typography.headlineMedium,fontWeight=FontWeight.ExtraBold,color=Color.White);Spacer(Modifier.height(4.dp));Text(stringResource(R.string.tagline),fontSize=13.sp,color=Color(0xFFC7D2FE))
+   Text("🛍️",fontSize=40.sp);Spacer(Modifier.height(6.dp));Text(stringResource(R.string.app_name),style=MaterialTheme.typography.headlineMedium,fontWeight=FontWeight.ExtraBold,color=DukaanColors.OnYellow);Spacer(Modifier.height(4.dp));Text(stringResource(R.string.tagline),fontSize=13.sp,color=DukaanColors.Slate700)
    Spacer(Modifier.height(20.dp));RoleTabs(tab){tab=it}
   }
   Column(Modifier.fillMaxWidth().padding(20.dp)){
@@ -676,9 +675,9 @@ fun drawerIdentity(profile:LocalProfile?,shops:List<LocalShop>,selectedShopId:St
   }
  }}
 @Composable fun RoleTabs(selected:String,on:(String)->Unit){
- Surface(shape=RoundedCornerShape(14.dp),color=Color(0x33FFFFFF)){Row(Modifier.fillMaxWidth().padding(4.dp),horizontalArrangement=Arrangement.spacedBy(4.dp)){
-  Box(Modifier.weight(1f).clip(RoundedCornerShape(11.dp)).background(if(selected=="CUSTOMER")Color.White else Color.Transparent).clickable{on("CUSTOMER")}.padding(vertical=10.dp),contentAlignment=Alignment.Center){Text("🛒 Customer",fontWeight=FontWeight.Bold,fontSize=13.sp,color=if(selected=="CUSTOMER")DukaanColors.Dark else Color(0xFFC7D2FE))}
-  Box(Modifier.weight(1f).clip(RoundedCornerShape(11.dp)).background(if(selected=="SHOPKEEPER")Color.White else Color.Transparent).clickable{on("SHOPKEEPER")}.padding(vertical=10.dp),contentAlignment=Alignment.Center){Text("🏪 Shopkeeper",fontWeight=FontWeight.Bold,fontSize=13.sp,color=if(selected=="SHOPKEEPER")DukaanColors.Dark else Color(0xFFC7D2FE))}
+ Surface(shape=RoundedCornerShape(14.dp),color=Color(0x55000000)){Row(Modifier.fillMaxWidth().padding(4.dp),horizontalArrangement=Arrangement.spacedBy(4.dp)){
+  Box(Modifier.weight(1f).clip(RoundedCornerShape(11.dp)).background(if(selected=="CUSTOMER")Color.White else Color.Transparent).clickable{on("CUSTOMER")}.padding(vertical=10.dp),contentAlignment=Alignment.Center){Text("🛒 Customer",fontWeight=FontWeight.Bold,fontSize=13.sp,color=if(selected=="CUSTOMER")DukaanColors.Dark else DukaanColors.OnYellow)}
+  Box(Modifier.weight(1f).clip(RoundedCornerShape(11.dp)).background(if(selected=="SHOPKEEPER")Color.White else Color.Transparent).clickable{on("SHOPKEEPER")}.padding(vertical=10.dp),contentAlignment=Alignment.Center){Text("🏪 Shopkeeper",fontWeight=FontWeight.Bold,fontSize=13.sp,color=if(selected=="SHOPKEEPER")DukaanColors.Dark else DukaanColors.OnYellow)}
  }}}
 @Composable fun PremiumLogin(role:String,go:(String,String,String)->Unit,showRegister:()->Unit){var p by remember{mutableStateOf("+91")};var pin by remember{mutableStateOf("")};val valid=p.filter{it.isDigit()}.length>=10&&(pin.length==4||pin.length==6)
  Card(Modifier.fillMaxWidth(),shape=RoundedCornerShape(20.dp),colors=CardDefaults.cardColors(containerColor=Color.White),elevation=CardDefaults.cardElevation(4.dp)){

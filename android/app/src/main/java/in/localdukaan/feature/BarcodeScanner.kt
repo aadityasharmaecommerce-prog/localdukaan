@@ -65,7 +65,7 @@ private val BlinkitGreen = DukaanColors.BlinkitGreen
  val permission=rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()){ok->granted=ok;asked=true}
  LaunchedEffect(Unit){if(!granted&&!asked)permission.launch(Manifest.permission.CAMERA)}
  if(!granted){CameraPermissionCard(asked){permission.launch(Manifest.permission.CAMERA)};return}
- if(!active){ScannerNotice("⏸ Scanner paused — cart dekhein ya resume karein");return}
+  if(!active){ScannerNotice("Scanner paused — check the cart or resume");return}
  val viewRef=remember{mutableStateOf<PreviewView?>(null)}
  val providerRef=remember{mutableStateOf<ProcessCameraProvider?>(null)}
  val cameraRef=remember{mutableStateOf<Camera?>(null)}
@@ -80,7 +80,7 @@ private val BlinkitGreen = DukaanColors.BlinkitGreen
   // Aim box: EAN/UPC symbols are wide and low, so a wide window reads packs much faster.
   Box(Modifier.align(Alignment.Center).fillMaxWidth(0.84f).height(118.dp).border(2.dp,BlinkitGreen,RoundedCornerShape(12.dp)))
   Box(Modifier.align(Alignment.TopCenter).fillMaxWidth().background(Color(0xCC003D1F)).padding(horizontal=10.dp,vertical=6.dp)){
-   Text("Barcode ko green box mein rakhein",color=DukaanColors.BlinkitYellow,fontSize=12.sp,fontWeight=FontWeight.SemiBold,modifier=Modifier.align(Alignment.CenterStart))
+    Text("Keep the barcode inside the green box",color=DukaanColors.FlipkartYellow,fontSize=12.sp,fontWeight=FontWeight.SemiBold,modifier=Modifier.align(Alignment.CenterStart))
   }
   Row(Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(Color(0x99000000)).padding(horizontal=10.dp,vertical=4.dp),verticalAlignment=Alignment.CenterVertically){
    Text(status?:"🔍 Scanning…",color=if(status!=null)Color(0xFF86EFAC) else Color.White,fontSize=12.sp,fontWeight=FontWeight.SemiBold,modifier=Modifier.weight(1f))
@@ -92,18 +92,21 @@ private val BlinkitGreen = DukaanColors.BlinkitGreen
   while(viewRef.value==null)delay(40)
   val view=viewRef.value?:return@LaunchedEffect
   val executor=Executors.newSingleThreadExecutor()
-  // Retail symbologies: grocery/cosmetic packs plus the price labels shops print themselves.
-  val mlkit=runCatching{BarcodeScanning.getClient(BarcodeScannerOptions.Builder().setBarcodeFormats(
-   Barcode.FORMAT_EAN_13,Barcode.FORMAT_EAN_8,Barcode.FORMAT_UPC_A,Barcode.FORMAT_UPC_E,
-   Barcode.FORMAT_CODE_128,Barcode.FORMAT_CODE_39,Barcode.FORMAT_CODE_93,Barcode.FORMAT_ITF,
-   Barcode.FORMAT_CODABAR,Barcode.FORMAT_DATA_MATRIX,Barcode.FORMAT_QR_CODE,Barcode.FORMAT_AZTEC,Barcode.FORMAT_PDF417
-  ).build())}.getOrNull()
+   // Retail symbologies: grocery/cosmetic packs plus the price labels shops print themselves.
+   // (AZTEC/PDF417/CODABAR hataye — retail packs par nahi milte, speed ke liye.)
+   val mlkit=runCatching{BarcodeScanning.getClient(BarcodeScannerOptions.Builder().setBarcodeFormats(
+    Barcode.FORMAT_EAN_13,Barcode.FORMAT_EAN_8,Barcode.FORMAT_UPC_A,Barcode.FORMAT_UPC_E,
+    Barcode.FORMAT_CODE_128,Barcode.FORMAT_CODE_39,Barcode.FORMAT_CODE_93,Barcode.FORMAT_ITF,
+    Barcode.FORMAT_DATA_MATRIX,Barcode.FORMAT_QR_CODE
+   ).build())}.getOrNull()
   try{
    val provider=suspendCancellableCoroutine{cont->val f=ProcessCameraProvider.getInstance(context);f.addListener({try{cont.resume(f.get())}catch(t:Throwable){cont.cancel(t)}},ContextCompat.getMainExecutor(context))}
    providerRef.value=provider
    val preview=Preview.Builder().build().also{it.setSurfaceProvider(view.surfaceProvider)}
-   val zxing=MultiFormatReader().apply{setHints(mapOf(DecodeHintType.POSSIBLE_FORMATS to RETAIL_ZXING_FORMATS,DecodeHintType.TRY_HARDER to true,DecodeHintType.ALSO_INVERTED to true))}
-   var last:String?=null;var lastAt=0L;var frame=0L
+    // Speed: 960x540 me retail EAN aaram se padhta hai, pixels ~44% kam (720p se tez).
+    // ZXing rescue TRY_HARDER ke bina + sirf aim-box crop par — full-frame heavy pass hata.
+    val zxing=MultiFormatReader().apply{setHints(mapOf(DecodeHintType.POSSIBLE_FORMATS to RETAIL_ZXING_FORMATS,DecodeHintType.ALSO_INVERTED to true))}
+    var last:String?=null;var lastAt=0L;var frame=0L
    val mainHandler=android.os.Handler(android.os.Looper.getMainLooper())
    fun report(code:String){runCatching{mainHandler.post{runCatching{status="✓ $code";onBarcode(code)}}}}
    fun emit(raw:String?){
@@ -115,22 +118,17 @@ private val BlinkitGreen = DukaanColors.BlinkitGreen
     runCatching{val v=context.getSystemService(Vibrator::class.java);if(v!=null){if(Build.VERSION.SDK_INT>=26)v.vibrate(VibrationEffect.createOneShot(60,VibrationEffect.DEFAULT_AMPLITUDE))else @Suppress("DEPRECATION") v.vibrate(60)}}
     report(code)
    }
-   val analysis=ImageAnalysis.Builder().setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST).setTargetResolution(android.util.Size(1280,720)).build()
-   runCatching{analysis.targetRotation=view.display.rotation}
-   analysis.setAnalyzer(executor){image->
-    frame++
-    try{
-     val media=image.image
-     if(media==null||image.width<=0||image.height<=0){image.close();return@setAnalyzer}
-     val rotation=image.imageInfo.rotationDegrees
-     val w=image.width;val h=image.height
-     val p0=image.planes[0];val buf=p0.buffer;val rowStride=p0.rowStride
-     val data=ByteArray(w*h)
-     if(rowStride==w)buf.get(data) else{var off=0;var pos=0;for(r in 0 until h){buf.position(pos);buf.get(data,off,w);off+=w;pos+=rowStride}}
-     // The manual copy above moved every plane's position: rewind before ML Kit reads the frame.
-     for(p in image.planes)runCatching{p.buffer.rewind()}
-     if(mlkit!=null){
-      runCatching{mlkit.process(InputImage.fromMediaImage(media,rotation))
+    val analysis=ImageAnalysis.Builder().setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST).setTargetResolution(android.util.Size(960,540)).build()
+    runCatching{analysis.targetRotation=view.display.rotation}
+    analysis.setAnalyzer(executor){image->
+     frame++
+     try{
+      val media=image.image
+      if(media==null||image.width<=0||image.height<=0){image.close();return@setAnalyzer}
+      val rotation=image.imageInfo.rotationDegrees
+      val w=image.width;val h=image.height
+      if(mlkit!=null){
+       runCatching{mlkit.process(InputImage.fromMediaImage(media,rotation))
        .addOnSuccessListener{codes->runCatching{
         // Prefer a code with a valid GS1 checksum; fall back to any catalogue-worthy value.
         val best=codes.mapNotNull{it.rawValue?:it.displayValue}.map{it to BarcodeRules.extractProductCode(it)}
@@ -141,15 +139,20 @@ private val BlinkitGreen = DukaanColors.BlinkitGreen
        .addOnCompleteListener{runCatching{image.close()}}}
         .getOrElse{runCatching{image.close()}}
      } else runCatching{image.close()}
-     // Rescue pass: faded / curved / shiny packs that ML Kit misses.
-     if(frame%6==0L){
-      try{
-       var result:Result?=null
-       try{result=zxing.decodeWithState(BinaryBitmap(HybridBinarizer(PlanarYUVLuminanceSource(data,w,h,0,0,w,h,false))))}catch(_:NotFoundException){}
-       if(result==null){val rot=ByteArray(w*h);var i=0;for(x in 0 until w){var y=h-1;while(y>=0){rot[i++]=data[y*w+x];y--}};try{result=zxing.decodeWithState(BinaryBitmap(HybridBinarizer(PlanarYUVLuminanceSource(rot,h,w,0,0,h,w,false))))}catch(_:NotFoundException){}}
-       result?.text?.let{emit(it)}
-      }catch(_:Throwable){}
-     }
+      // Rescue pass (har 10th frame, sirf aim-box band crop): faded/curved packs jo ML Kit miss kare.
+      // YUV copy bhi sirf yahin hota hai — har frame par nahi (allocation + CPU bachat).
+      if(frame%10==0L){
+       try{
+        val p0=image.planes[0];val buf=p0.buffer;val rowStride=p0.rowStride
+        val data=ByteArray(w*h)
+        if(rowStride==w)buf.get(data) else{var off=0;var pos=0;for(r in 0 until h){buf.position(pos);buf.get(data,off,w);off+=w;pos+=rowStride}}
+        val cx=(w*0.08).toInt();val cy=(h*0.32).toInt();val cw=(w*0.84).toInt();val ch=(h*0.36).toInt()
+        var result:Result?=null
+        try{result=zxing.decodeWithState(BinaryBitmap(HybridBinarizer(PlanarYUVLuminanceSource(data,w,h,cx,cy,cw,ch,false))))}catch(_:NotFoundException){}
+        if(result==null){val rot=ByteArray(cw*ch);var i=0;for(x in 0 until cw){var y=ch-1;while(y>=0){rot[i++]=data[(cy+y)*w+cx+x];y--}};try{result=zxing.decodeWithState(BinaryBitmap(HybridBinarizer(PlanarYUVLuminanceSource(rot,ch,cw,0,0,ch,cw,false))))}catch(_:NotFoundException){}}
+        result?.text?.let{emit(it)}
+       }catch(_:Throwable){}
+      }
     }catch(_:Throwable){runCatching{image.close()}}finally{runCatching{zxing.reset()}}
    }
    runCatching{provider.unbindAll()}
@@ -162,7 +165,7 @@ private val BlinkitGreen = DukaanColors.BlinkitGreen
 
 // Crash guard (QA me mila tha): analyzer thread me emit hote hue camera unbind ho chuka ho to
 // state write na kare — "Writing to state during disposal" crash hota tha.
-private val RETAIL_ZXING_FORMATS=listOf(BarcodeFormat.EAN_13,BarcodeFormat.EAN_8,BarcodeFormat.UPC_A,BarcodeFormat.UPC_E,BarcodeFormat.CODE_128,BarcodeFormat.CODE_93,BarcodeFormat.CODE_39,BarcodeFormat.ITF,BarcodeFormat.CODABAR,BarcodeFormat.RSS_14,BarcodeFormat.RSS_EXPANDED)
+private val RETAIL_ZXING_FORMATS=listOf(BarcodeFormat.EAN_13,BarcodeFormat.EAN_8,BarcodeFormat.UPC_A,BarcodeFormat.UPC_E,BarcodeFormat.CODE_128,BarcodeFormat.CODE_93,BarcodeFormat.CODE_39,BarcodeFormat.ITF,BarcodeFormat.RSS_14,BarcodeFormat.RSS_EXPANDED)
 
 @Composable private fun ScannerNotice(text:String){ Box(Modifier.fillMaxWidth().height(96.dp).clip(RoundedCornerShape(16.dp)).background(DukaanColors.Slate100),contentAlignment=Alignment.Center){Text(text,color=DukaanColors.Gray,fontWeight=FontWeight.SemiBold,fontSize=14.sp)}}
 
@@ -170,10 +173,10 @@ private val RETAIL_ZXING_FORMATS=listOf(BarcodeFormat.EAN_13,BarcodeFormat.EAN_8
  val context=LocalContext.current
  Box(Modifier.fillMaxWidth().height(150.dp).clip(RoundedCornerShape(16.dp)).background(DukaanColors.LightYellow),contentAlignment=Alignment.Center){
   Column(Modifier.padding(16.dp),horizontalAlignment=Alignment.CenterHorizontally){
-   Text(if(asked)"Camera band hai — bina permission scan nahi ho payega." else "Scanner ke liye camera ki permission chahiye.",color=Color(0xFF8A6D00),fontWeight=FontWeight.SemiBold,fontSize=13.sp)
-   Spacer(Modifier.height(8.dp))
-   Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){
-    TextButton(retry){Text("Permission do",color=DukaanColors.BlinkitGreen,fontWeight=FontWeight.Bold)}
+    Text(if(asked)"Camera is off — scanning needs permission." else "Scanner needs camera permission.",color=Color(0xFF8A6D00),fontWeight=FontWeight.SemiBold,fontSize=13.sp)
+    Spacer(Modifier.height(8.dp))
+    Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){
+     TextButton(retry){Text("Allow",color=DukaanColors.BlinkitGreen,fontWeight=FontWeight.Bold)}
     TextButton({runCatching{context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).setData(Uri.fromParts("package",context.packageName,null)))}}){Text("Settings",color=DukaanColors.BlinkitGreen)}
    }
   }
