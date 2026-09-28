@@ -1,10 +1,13 @@
 package `in`.localdukaan.ui
 
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Typography
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
 
 /**
  * LocalDukaan "Premium Dukaan" design system.
@@ -52,6 +55,15 @@ object DukaanColors {
     val OnYellow = Color(0xFF1A1A1A)
     val DrawerGradient = Brush.verticalGradient(listOf(Color(0xFFFFD814), Color(0xFFF5C236)))
 }
+
+private val LightTypography = Typography(
+    headlineMedium = androidx.compose.ui.text.TextStyle(fontWeight = FontWeight.ExtraBold, fontSize = 28.sp, lineHeight = 34.sp),
+    titleLarge = androidx.compose.ui.text.TextStyle(fontWeight = FontWeight.Bold, fontSize = 21.sp, lineHeight = 26.sp),
+    titleMedium = androidx.compose.ui.text.TextStyle(fontWeight = FontWeight.Bold, fontSize = 17.sp, lineHeight = 22.sp),
+    bodyLarge = androidx.compose.ui.text.TextStyle(fontSize = 16.sp, lineHeight = 22.sp),
+    bodyMedium = androidx.compose.ui.text.TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
+    labelLarge = androidx.compose.ui.text.TextStyle(fontWeight = FontWeight.Bold, fontSize = 14.sp, lineHeight = 20.sp)
+)
 
 private val LightColorScheme = lightColorScheme(
     primary = DukaanColors.BlinkitGreen,
